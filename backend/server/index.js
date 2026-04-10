@@ -975,13 +975,44 @@ async function ensureAppSettingsTable() {
 // ---------- DB schema initialization (RUN ONCE AT STARTUP) ----------
 
 async function runLegacyMigrationsFromIndexIfEnabled() {
-  const shouldRun =
+  const envFlagEnabled =
     String(process.env.RUN_MIGRATIONS_ON_STARTUP || "").toLowerCase() === "true" ||
     String(process.env.RUN_MIGRATIONS_ON_STARTUP || "") === "1";
 
+  const isRailway =
+    Boolean(process.env.RAILWAY_ENVIRONMENT) ||
+    Boolean(process.env.RAILWAY_PROJECT_ID) ||
+    Boolean(process.env.RAILWAY_SERVICE_ID);
+
+  let shouldRun = envFlagEnabled;
+
+  // Auto-heal on Railway: if core tables are missing, run migrations automatically.
+  if (!shouldRun && isRailway) {
+    let conn;
+    try {
+      conn = await db.getConnection();
+      const schema = process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || DB_NAME;
+      if (schema) {
+        const [[row]] = await conn.query(
+          `SELECT COUNT(*) AS cnt
+             FROM information_schema.tables
+            WHERE table_schema = ?
+              AND table_name = 'indents'`,
+          [schema]
+        );
+        const cnt = row ? Number(row.cnt || 0) : 0;
+        if (cnt === 0) shouldRun = true;
+      }
+    } catch (e) {
+      // If we can't check, don't block startup; migrations can be triggered via env flag.
+    } finally {
+      if (conn) try { await conn.release(); } catch (e) { }
+    }
+  }
+
   if (!shouldRun) return;
 
-  console.log("🧱 RUN_MIGRATIONS_ON_STARTUP enabled. Running migrations 01→20...");
+  console.log("🧱 Running migrations 01→20 (startup)...");
 
   const runnerPath = path.join(__dirname, "migrations", "run-all-migrations-railway.js");
   const res = spawnSync(process.execPath, [runnerPath], {
