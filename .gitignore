@@ -23,7 +23,7 @@ Thumbs.db
 .vscode
 .idea
 
-backend/uploads/
+!backend/uploads/.gitignore
 frontend/dist/
 node_modules/
 .env
