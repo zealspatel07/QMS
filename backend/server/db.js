@@ -11,6 +11,15 @@ let pool = null;
 function initPool() {
   if (pool) return pool;
 
+  // ✅ PRODUCTION (Railway)
+  if (process.env.DATABASE_URL) {
+    console.log("Using Railway DATABASE_URL");
+
+    pool = mysql.createPool(process.env.DATABASE_URL);
+    return pool;
+  }
+
+  // ✅ LOCAL DEVELOPMENT (fallback)
   const {
     DB_HOST,
     DB_USER,
@@ -19,8 +28,10 @@ function initPool() {
     DB_PORT,
   } = process.env;
 
+  console.log("Using LOCAL DB config");
+
   if (!DB_HOST || !DB_USER || !DB_NAME) {
-    throw new Error("Missing DB_* environment variables");
+    throw new Error("Missing DB config for local environment");
   }
 
   pool = mysql.createPool({
