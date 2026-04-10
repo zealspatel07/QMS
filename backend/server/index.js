@@ -971,6 +971,36 @@ async function ensureAppSettingsTable() {
 }
 
 
+async function ensureAdminUser() {
+  let conn;
+  try {
+    conn = await db.getConnection();
+
+    const bcrypt = require("bcryptjs");
+
+    const username = "Admin@1";
+    const email = "admin@qms.com";
+    const password = "Admin@12345";
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await conn.query(`
+      INSERT INTO users (username, email, name, password_hash, role, is_active)
+      VALUES (?, ?, 'Admin', ?, 'admin', 1)
+      ON DUPLICATE KEY UPDATE
+        password_hash = VALUES(password_hash),
+        role = 'admin',
+        is_active = 1
+    `, [username, email, passwordHash]);
+
+    console.log("✅ Admin ensured (Admin@1)");
+  } catch (err) {
+    console.error("❌ Admin seed failed:", err.message);
+  } finally {
+    conn?.release();
+  }
+}
+
 
 // ---------- DB schema initialization (RUN ONCE AT STARTUP) ----------
 
@@ -1066,6 +1096,7 @@ async function runLegacyMigrationsFromIndexIfEnabled() {
     await ensureQuotationDecisionsTable();
     await ensureQuotationVersionsTable();
     await ensureAppSettingsTable();
+    await ensureAdminUser();
 
     await ensureNotificationsTable();
     console.log('Database schema ready');
