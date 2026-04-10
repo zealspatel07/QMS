@@ -20,7 +20,7 @@ function roleFilter(req, alias = "q") {
 async function hasColumn(conn, table, column) {
   try {
     const schema =
-      process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || process.env.DB_NAME;
+      process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || db.DB_NAME;
     if (!schema) return false;
     const [rows] = await conn.query(
       `SELECT COUNT(*) AS cnt FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?`,

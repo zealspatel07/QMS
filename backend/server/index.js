@@ -5,20 +5,19 @@ require("dotenv").config({
   path: path.resolve(__dirname, "../.env"),
 });
 
-console.log("DB ENV CHECK:", {
-  DB_HOST: process.env.DB_HOST,
-  DB_USER: process.env.DB_USER,
-  DB_NAME: process.env.DB_NAME,
-  DB_PORT: process.env.DB_PORT,
-
-});
-
-
 const express = require('express');
 const cors = require('cors');
 const db = require('./db'); // must expose getConnection() and endPool()
+const { DB_NAME } = db;
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+
+console.log("DB ENV CHECK:", {
+  DB_HOST: process.env.DB_HOST,
+  DB_USER: process.env.DB_USER,
+  DB_NAME: DB_NAME,
+  DB_PORT: process.env.DB_PORT,
+});
 
 const http = require('http');
 const { calculateTotals } = require('./utils/quotationCalculator');
@@ -618,7 +617,7 @@ async function ensureQuotationsTable() {
     const schema =
       process.env.MYSQLDATABASE ||
       process.env.MYSQL_DATABASE ||
-      process.env.DB_NAME;
+      DB_NAME;
     if (!schema) {
       throw new Error('DB_NAME environment variable is not set');
     }
@@ -789,7 +788,7 @@ async function ensureNotificationsTable() {
     const schema =
       process.env.MYSQLDATABASE ||
       process.env.MYSQL_DATABASE ||
-      process.env.DB_NAME;
+      DB_NAME;
     if (!schema) {
       throw new Error('DB_NAME environment variable is not set');
     }
@@ -936,7 +935,10 @@ async function ensureAppSettingsTable() {
     const schema =
       process.env.MYSQLDATABASE ||
       process.env.MYSQL_DATABASE ||
-      process.env.DB_NAME;
+      DB_NAME;
+    if (!schema) {
+      throw new Error('DB_NAME environment variable is not set');
+    }
 
     const [cols] = await conn.query(
       `SELECT COLUMN_NAME

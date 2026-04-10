@@ -3,14 +3,40 @@ const mysql = require("mysql2/promise");
 console.log("ENV CHECK:", process.env.DB_HOST);
 let pool = null;
 
+function getDatabaseUrl() {
+  return (
+    process.env.DATABASE_URL ||
+    process.env.MYSQL_URL ||
+    process.env.MYSQLDATABASE_URL ||
+    null
+  );
+}
+
+function deriveDbName() {
+  const databaseUrl = getDatabaseUrl();
+  if (databaseUrl) {
+    try {
+      const url = new URL(databaseUrl);
+      const name = (url.pathname || "").replace(/^\//, "");
+      return name || null;
+    } catch (e) {
+      return null;
+    }
+  }
+  return process.env.DB_NAME || null;
+}
+
+const DB_NAME = deriveDbName();
+
 function initPool() {
   if (pool) return pool;
 
   // ✅ PRODUCTION (Railway)
-  if (process.env.MYSQL_URL) {
+  const databaseUrl = getDatabaseUrl();
+  if (databaseUrl) {
     console.log("Using Railway DATABASE_URL");
 
-    pool = mysql.createPool(process.env.MYSQL_URL);
+    pool = mysql.createPool(databaseUrl);
     return pool;
   }
 
@@ -19,7 +45,6 @@ function initPool() {
     DB_HOST,
     DB_USER,
     DB_PASSWORD,
-    DB_NAME,
     DB_PORT,
   } = process.env;
 
@@ -30,11 +55,11 @@ function initPool() {
   }
 
   pool = mysql.createPool({
-    host: url.hostname,
-    user: url.username,
-    password: url.password,
-    database: url.pathname.replace("/", ""),
-    port: url.port || 3306,
+    host: DB_HOST,
+    user: DB_USER,
+    password: DB_PASSWORD,
+    database: DB_NAME,
+    port: Number(DB_PORT) || 3306,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
@@ -55,4 +80,6 @@ module.exports = {
       pool = null;
     }
   },
+
+  DB_NAME,
 };
