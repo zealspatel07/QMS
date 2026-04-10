@@ -810,7 +810,7 @@ router.get("/purchase-orders/:id", authMiddleware, requirePOAccess, async (req, 
                 (pi.ordered_qty - pi.received_qty) AS pending_qty,
 
                 CASE
-                    WHEN pi.received_qty = 0 THEN 'pending'
+                      WHEN pi.received_qty = 0 THEN 'created'
                     WHEN pi.received_qty < pi.ordered_qty THEN 'partial'
                     ELSE 'completed'
                 END AS delivery_status
@@ -974,9 +974,9 @@ router.put("/po-items/:id/receive", authMiddleware, requirePOCreation, async (re
         // --------------------------------------------------
         await conn.query(
             `UPDATE po_items
-             SET received_qty=?, status=?
+             SET received_qty=?
              WHERE id=?`,
-            [received, status, itemId]
+            [received, itemId]
         );
 
         // --------------------------------------------------
@@ -1128,8 +1128,7 @@ router.post('/po-items/:id/complete', authMiddleware, requirePOCreation, async (
         // --------------------------------------------------
         await conn.query(
             `UPDATE po_items
-             SET received_qty = ordered_qty,
-                 status = 'completed'
+             SET received_qty = ordered_qty
              WHERE id=?`,
             [itemId]
         );
@@ -1160,23 +1159,23 @@ router.post('/po-items/:id/complete', authMiddleware, requirePOCreation, async (
         await conn.query(
 
             `UPDATE purchase_orders
-             SET status =
-             CASE
-               WHEN NOT EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status!='completed'
-               )
-               THEN 'completed'
+SET status =
+CASE
+  WHEN NOT EXISTS (
+      SELECT 1 FROM po_items
+      WHERE po_id=? AND received_qty < ordered_qty
+  )
+  THEN 'completed'
 
-               WHEN EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status='completed'
-               )
-               THEN 'partial'
+  WHEN EXISTS (
+      SELECT 1 FROM po_items
+      WHERE po_id=? AND received_qty > 0
+  )
+  THEN 'partial'
 
-               ELSE 'pending'
-             END
-             WHERE id=?`,
+  ELSE 'created'
+END
+WHERE id=?`,
 
             [poId, poId, poId]
 
