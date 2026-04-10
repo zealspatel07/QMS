@@ -1,0 +1,20 @@
+/* Hidden iframe for print functionality */
+.print-iframe-hidden {
+  position: fixed;
+  width: 0;
+  height: 0;
+  border: none;
+  visibility: hidden;
+}
+
+/* Progress bar styles */
+.progressBarFill {
+  height: 0.625rem;
+  border-radius: 9999px;
+  transition: all 0.3s ease;
+  width: var(--progress-width, 0%);
+}
+
+.progressBar100 {
+  width: 100%;
+}

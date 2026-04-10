@@ -1,0 +1,209 @@
+/* utility: visually hidden but accessible label */
+.visuallyHidden {
+  position: absolute !important;
+  height: 1px;
+  width: 1px;
+  overflow: hidden;
+  clip: rect(1px,1px,1px,1px);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: -1px;
+}
+
+/* page layout */
+.pagePadding {
+  padding: 24px 32px;
+}
+
+/* header */
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.headerRow h2 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #0f172a; /* slate-800 */
+  margin: 0;
+}
+
+/* new quotation button */
+.newBtn {
+  background: #f43f5e;
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.newBtn:hover {
+  background: #e63950;
+}
+
+/* CARD PANEL — MATCH PRODUCTS PAGE */
+.panel {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;         /* light border */
+  border-radius: 12px;               /* smoother corners */
+  padding: 20px;                     /* more padding */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05); /* soft shadow like Product page */
+}
+
+/* search + filter row */
+.controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: center;
+  flex-wrap: wrap; /* responsive */
+}
+
+/* search input enhanced */
+.searchInput {
+  flex: 1;
+  min-width: 260px;
+  padding: 10px 14px;
+  border: 1px solid #d0d7df;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  color: #0f172a;
+}
+.searchInput:focus {
+  outline: none;
+  border-color: #f43f5e;
+  box-shadow: 0 0 0 3px rgba(244,63,94,0.15);
+}
+
+/* dropdown */
+.select {
+  padding: 10px 12px;
+  border: 1px solid #d0d7df;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  min-width: 140px;
+}
+
+/* export button */
+.exportBtn {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #d0d7df;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.exportBtn:hover {
+  background: #f8fafc;
+}
+
+/* table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.thRow {
+  background: #fbfdff;             /* clean header look */
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.th {
+  padding: 14px 12px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #475569; /* slate-600 */
+}
+
+.td {
+  padding: 14px 12px;
+  vertical-align: middle;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+/* table row hover effect */
+.table tbody tr:hover {
+  background: #fafcff;
+}
+
+/* amount column */
+.amount {
+  text-align: right;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* status pill — upgraded */
+.statusPill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #e0f2fe;   /* blue-light default */
+  color: #0369a1;
+  text-transform: capitalize;
+}
+
+/* action buttons */
+.actionsCell {
+  padding: 14px 12px;
+  vertical-align: middle;
+  text-align: right;
+  min-width: 180px;
+}
+
+.actionGroup {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* view button */
+.linkBtn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: #475569;
+}
+.linkBtn:hover { color:#1e293b; text-decoration: underline; }
+
+/* edit button */
+.editBtn {
+  background: #f8fafc;
+  border: 1px solid #d0d7df;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.editBtn:hover {
+  background: #eef2f6;
+}
+
+/* delete button */
+.deleteBtn {
+  background: transparent;
+  border: none;
+  color: #e11d48;
+  cursor: pointer;
+  font-size: 14px;
+}
+.deleteBtn:hover { text-decoration: underline; }
+
+/* empty row */
+.emptyRow {
+  padding: 28px;
+  text-align: center;
+  color: #64748b;
+  font-size: 14px;
+}

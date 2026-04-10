@@ -1,0 +1,15 @@
+node server/migrations/01_create_indents_table.js
+node server/migrations/02_create_vendors_table.js
+node server/migrations/03_create_purchase_orders_table.js
+node server/migrations/04_create_quotation_sequences.js
+node server/migrations/04_vendor_schema_migration.js
+node server/migrations/05_add_closed_columns.js
+node server/migrations/06_add_po_number_to_indents.js
+node server/migrations/07_add_gst_verified_column.js
+node server/migrations/08_add_quotation_fields_to_po.js
+node server/migrations/08_add_vendor_quote_fields.js
+node server/migrations/09_add_financial_fields.js
+node server/migrations/10_add_uom_support.js
+node server/migrations/11_add_po_terms_to_app_settings.js
+node server/migrations/12_add_vendor_address_snapshot.js
+node server/migrations/13_alter_indents_add_customer_relations.js

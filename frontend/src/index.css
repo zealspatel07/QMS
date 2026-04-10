@@ -1,0 +1,357 @@
+/* index.css contains this code :- */ 
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500&display=swap');
+
+/* stylelint-disable at-rule-no-unknown */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------
+   Design tokens & defaults
+   ------------------------- */
+:root {
+  /* Color tokens stored as H S L triplets for easier alpha-aware usage: "H S% L%" */
+  --color-coral: 6 90% 66%; /* Primary Coral */
+  --color-navy: 218 75% 19%; /* Deep Navy */
+  --color-blue: 224 63% 33%; /* Accent Blue */
+  --color-gray: 240 16% 96%; /* Light Gray surface */
+
+  --bg-default: 0 0% 100%;
+  --text-default: 214 20% 8%;
+
+  /* Spacing / radius tokens */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Shadows */
+  --shadow-subtle: 0 2px 8px rgba(0,0,0,0.08);
+
+  /* Focus ring */
+  --focus-ring: 6 90% 60%; /* coral hue for focus ring (H S% L%) */
+
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* ---- Tokens required by the Layout + Sidebar ---- */
+  --sidebar-w-expanded: 18rem;    /* 288px */
+  --sidebar-w-collapsed: 5rem;    /* 80px  */
+
+  /* brand palette (HSL triplets kept for alpha usage if desired) */
+  --brand-navy-1: 218 75% 19%;
+  --brand-navy-2: 218 72% 22%;
+  --brand-coral: 6 90% 66%;
+  --brand-accent: 218 44% 34%;
+  --brand-magenta-1: 330 100% 60%;
+  --brand-magenta-2: 270 70% 60%;
+
+  /* convenience hex fallbacks */
+  --brand-navy-1-hex: #001F66;
+  --brand-coral-hex: #F46A5E;
+  --brand-accent-hex: #3A5BA0;
+
+  /* header fallback variables (Layout will set these inline; these are safe defaults) */
+  --header-height: 72px;
+  --page-gutter: 1rem;
+  --card-radius: 12px;
+  --soft-shadow: 0 8px 30px rgba(16,24,40,0.06);
+  --active-shadow: 0 12px 40px rgba(58,91,160,0.12);
+}
+
+/* Disable smooth scrolling */
+html {
+  scroll-behavior: auto !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+html::-webkit-scrollbar {
+  display: none !important;
+}
+
+body {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+body::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* Hide all scrollbars globally */
+::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Accessibility: keyboard focus */
+:focus-visible {
+  outline: 3px solid rgba(58,91,160,0.18);
+  outline-offset: 2px;
+}
+
+/* Ensure app body is plain white to avoid visual bleed behind fixed sidebar */
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+ background: #f8fafc; 
+  color: rgb(33 53 71 / 1);
+  font-family: 'Inter', sans-serif;
+}
+
+/* brand gradient helper used by Sidebar header */
+.brand-gradient {
+  background: linear-gradient(90deg, var(--brand-magenta-1), var(--brand-magenta-2), rgb(58 91 160 / 1));
+  color: white;
+}
+
+/* Basic element and typographic defaults */
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+h1 { font-size: 3.2em; line-height: 1.1; }
+
+button {
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto hsl(var(--focus-ring));
+  outline-offset: 2px;
+}
+
+/* use Poppins for headings */
+h1, h2, h3, h4, h5 {
+  font-family: 'Poppins', sans-serif;
+}
+
+/* Utility helper classes for design system primitives */
+.card {
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-subtle);
+  padding: 1.5rem;
+}
+
+.focus-ring { box-shadow: 0 0 0 4px rgba(244,98,90,0.12); }
+
+/* Login page specific styles - fallback styling that doesn't rely on Tailwind */
+.login-root {
+  min-height: 100vh;
+  display: flex;
+  align-items: stretch;
+}
+.login-left {
+  flex: 1 1 50%;
+  background: linear-gradient(135deg, hsl(var(--color-coral)) 0%, hsl(var(--color-blue)) 100%);
+  color: white;
+  padding: 4rem 3rem;
+  display: flex;
+  align-items: center;
+}
+.login-left .brand { max-width: 560px; }
+.login-left h1 { font-size: 2.25rem; margin: 0 0 0.5rem 0; }
+.login-left p { opacity: 0.95; }
+.login-left .features { margin-top: 1.25rem; display: grid; gap: 0.75rem; }
+.feature-pill { background: rgba(255,255,255,0.08); padding: 0.75rem 1rem; border-radius: 0.5rem; }
+
+.login-right {
+  flex: 1 1 50%;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+}
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 30px rgba(16,24,40,0.06);
+  padding: 2rem;
+}
+.auth-card h2 { color: hsl(var(--color-navy)); margin-bottom: 0.75rem; }
+.form-row { margin-bottom: 1rem; }
+.input-field { width: 100%; padding: 0.75rem 0.85rem; border: 1px solid rgba(15,23,42,0.06); border-radius: 0.5rem; font-size: 0.95rem; }
+.input-field:focus { outline: none; box-shadow: 0 0 0 4px rgba(244,98,90,0.12); border-color: hsl(var(--color-coral)); }
+.actions { display:flex; justify-content:flex-end; gap:0.75rem; margin-top:0.5rem; }
+.btn-primary { background: hsl(var(--color-coral)); color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer; font-weight:600; }
+.btn-primary:hover { filter: brightness(0.95); }
+.link-coral { color: hsl(var(--color-coral)); text-decoration: none; }
+
+input, textarea, select {
+  background: #ffffff;
+  color: rgb(17 24 39 / 1);
+  border: 1px solid rgba(15,23,42,0.06);
+  border-radius: 0.5rem;
+}
+
+/* Autofill override for WebKit-based browsers */
+input:-webkit-autofill, textarea:-webkit-autofill, select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  -webkit-text-fill-color: rgb(17 24 39 / 1) !important;
+}
+
+@media (max-width: 768px) {
+  .login-root { flex-direction: column; }
+  .login-left { display: none; }
+  .login-right { padding: 2rem; }
+}
+
+/* ---------- project-specific helpers (append to index.css) ---------- */
+
+.shadow-subtle { box-shadow: var(--shadow-subtle); }
+
+/* two-line clamp for product descriptions (fallback) */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* subtle table header background and border helpers used in Products.tsx */
+.table-header { background: rgba(245, 247, 250, 1); border-bottom: 1px solid rgba(15,23,42,0.04); }
+
+/* small utility to tighten action button spacing */
+.row-actions button { padding: 0; margin: 0 6px; background: transparent; border: none; cursor: pointer; }
+
+textarea.input-field { resize: vertical; min-height: 72px; }
+
+/* optional: make the primary button style match existing tokens */
+.btn-rose {
+  background: hsl(var(--color-coral));
+  color: #fff;
+  border: none;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+}
+.btn-rose:hover { filter: brightness(0.96); }
+
+/* Dropdown helpers */
+.dropdown-container { position: relative; display: inline-block; }
+.dropdown-header {
+  background-color: #007bff;
+  color: white;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 150px;
+}
+.dropdown-header:hover { background-color: #0056b3; }
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  background-color: #f9f9f9;
+  min-width: 150px;
+  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+  z-index: 1;
+  border-radius: 4px;
+  margin-top: 5px;
+  list-style: none;
+  padding: 0;
+}
+.dropdown-menu li a {
+  color: black;
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+}
+.dropdown-menu li a:hover { background-color: #f1f1f1; }
+.dropdown-menu.visible { display: block; }
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  white-space: nowrap;
+}
+
+/* ---------- Header / Layout fallback (replaces conflicting fixed-header rules) ---------- */
+
+/* Make TopBar sticky and give it a known height */
+[role="banner"], .topbar, .topbar-wrapper, header[role="banner"] {
+  position: sticky;
+  top: 0;
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  z-index: 60;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: saturate(120%) blur(6px);
+  -webkit-backdrop-filter: saturate(120%) blur(6px);
+  box-shadow: 0 6px 18px rgba(11,15,30,0.04);
+}
+
+/* Ensure TopBar inner container is vertically centered (matches TopBar markup) */
+header .max-w-\[1400px\], .topbar .max-w-\[1400px\] {
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+}
+
+/* Main content fallback: ensure content is pushed below header 
+   **The conflicting padding-top rule that caused duplicate spacing was removed here.**
+*/
+
+/* CTA button subtle polish (keeps New Quote visible) */
+button.rounded-full {
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+button.rounded-full:hover { transform: translateY(-2px); }
+
+/* Table sticky header helper: adjust top for any local search bar or controls */
+.table thead th.sticky {
+  position: sticky;
+  top: calc(var(--header-height) + 12px);
+  z-index: 50;
+}
+
+/* sidebar helper (Layout is responsible for fixed placement) */
+.sidebar-glass {
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+}
+
+/* small typography polish */
+.text-muted { color: #6b7280; }
+
+.main-content {
+  background: transparent;
+}

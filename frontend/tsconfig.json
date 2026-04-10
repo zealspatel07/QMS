@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+     "jsx": "react-jsx"
+  },
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

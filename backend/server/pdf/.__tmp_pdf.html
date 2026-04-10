@@ -1,0 +1,139 @@
+<!-- server/pdf/quotation-template.html -->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  /* Page */
+  @page { size: A4; margin: 20mm; }
+  html,body { width:210mm; height:297mm; margin:0; padding:0; font-family: "Arial", "Helvetica", sans-serif; color:#111; font-size:12px; }
+  body { box-sizing:border-box; padding: 18px 18px 28px 18px; }
+
+  /* Header */
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
+  .company-left { width:60%; }
+  .company-right { width:35%; text-align:right; }
+  .logo { max-width:220px; height:auto; }
+
+  .doc-title { display:inline-block; padding:6px 10px; border:2px solid #e6a552; background:#fff0e6; font-weight:700; color:#000; font-size:14px; margin-bottom:6px; }
+  .ref-block { margin-top:6px; font-size:12px; }
+  .ref-block b { display:inline-block; width:70px; }
+
+  /* Recipient / subject */
+  .to-block { margin-top:10px; margin-bottom:8px; }
+  .subject { font-weight:700; margin-top:6px; margin-bottom:8px; }
+
+  /* Items table */
+  .items { width:100%; border-collapse:collapse; margin-top:12px; }
+  .items th, .items td { border:1px solid #111; padding:8px; vertical-align:top; font-size:11.5px; }
+  .items thead th { background:#f3c28d; font-weight:700; text-align:left; }
+  .items .desc { width:56%; }
+  .items .qty, .items .uprice, .items .total { width:12%; text-align:right; }
+
+  /* Terms */
+  .terms { margin-top:18px; font-size:11px; line-height:1.25; }
+
+  /* Footer logos / company info */
+  .footer { position: absolute; left:18px; right:18px; bottom:18px; height:120px; border-top:0px solid #ddd; padding-top:8px; display:flex; align-items:flex-end; justify-content:space-between; }
+  .partner-logos { display:flex; gap:12px; align-items:center; }
+  .partner-logos img { max-height:34px; object-fit:contain; opacity:0.95; }
+
+  .company-info { text-align:right; font-size:10px; line-height:1.1; width:45%; }
+
+  /* small helpers */
+  .muted { color:#444; font-size:11px; }
+  .bold { font-weight:700; }
+  .small { font-size:11px; }
+  .signature { margin-top:12px; }
+  .table-note { font-size:11px; margin-top:6px; color:#333; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="company-left">
+      <div class="doc-title">QUOTATION</div>
+      <div class="ref-block">
+        <div><b>Ref. No.:</b> <span id="ref_no">QT/202526/A/068</span></div>
+        <div><b>Date:</b> <span id="date">Sat Dec 13 2025 15:42:31 GMT+0530 (India Standard Time)</span></div>
+      </div>
+    </div>
+
+    <div class="company-right">
+      <!-- main company logo (file:// or http(s) provided by generator) -->
+      <img class="logo" src="file://D:\prayosha-quotation-ui(4)\public\logo.png" alt="Company logo">
+    </div>
+  </div>
+
+  <div class="to-block">
+    <div>To,</div>
+    <div id="to_name" style="font-weight:600;">Sun Pharma</div>
+    <div id="to_address" class="muted"></div>
+  </div>
+
+  <div class="subject">Subject: Offer for <span id="subject_item">—</span></div>
+
+  <div class="intro small">Dear Sir/Madam,</div>
+
+  <div style="margin-top:8px; font-size:12px;">
+    With respect to the subject valued inquiry, please find the price offer as below:
+  </div>
+
+  <table class="items" role="table" aria-label="Quotation items">
+    <thead>
+      <tr>
+        <th style="width:6%;">Sr No</th>
+        <th class="desc">Description</th>
+        <th class="qty">Qty.</th>
+        <th class="uprice">Unit Rate</th>
+        <th class="total">Total Amount</th>
+      </tr>
+    </thead>
+    <tbody id="items_body">
+      <!-- items inserted here -->
+      <tr>
+        <td style="padding:8px; vertical-align:top;">1.</td>
+        <td class="desc" style="padding:8px;">Product_test2 </td>
+        <td class="qty" style="padding:8px; text-align:right;">1</td>
+        <td class="uprice" style="padding:8px; text-align:right;">31,000.00</td>
+        <td class="total" style="padding:8px; text-align:right;">31,000.00</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="terms">
+    <div class="bold">Terms &amp; Condition:</div>
+    <div id="terms_text">1. Payment terms: 30 days from invoice date<br/>2. Delivery time: 4–6 weeks from order confirmation<br/>3. Prices are subject to change without notice</div>
+
+    <div class="table-note">
+      <div><strong>Statutory Variation:</strong> It is to be noted that "Statutory Variation in taxes &amp; duties" shall be payable extra if applicable.</div>
+      <div><strong>Cancellation:</strong> Order once placed shall not be subject to cancellation.</div>
+    </div>
+
+    <div class="signature">
+      <div>Regards,</div>
+      <div class="bold">Ravi Kumar Patel</div>
+      <div class="muted">Prayosha Automation Private Limited</div>
+      <div class="muted small">E-Mail: marketing@prayosha.net.in | Mo:+91 63560 06634</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="partner-logos" aria-hidden="true">
+      <!-- partner logos inserted by generator -->
+      <img src="{{logo_jumo}}" alt="Jumo">
+      <img src="{{logo_simens}}" alt="Simens">
+      <img src="{{logo_pilz}}" alt="Pilz">
+      <img src="{{logo_beijer}}" alt="Beijer">
+      <img src="{{logo_zenon}}" alt="Zenon">
+      <img src="{{logo_mitsubishi}}" alt="Mitsubishi">
+    </div>
+
+    <div class="company-info">
+      <div class="bold">PRAYOSHA AUTOMATION PRIVATE LIMITED</div>
+      <div class="muted">High Rise - 408, 409, Park Paradise, Nr. Billabong School, Kalali-Vadsar Road, Vadodara, Vadodara - 390012 (Guj.), IN</div>
+      <div style="margin-top:6px;">CIN: U74999GJ2020PTC115431 | GST: 24AALCP3186EZD</div>
+    </div>
+  </div>
+</body>
+</html>

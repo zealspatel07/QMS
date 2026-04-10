@@ -1,0 +1,178 @@
+/* src/components/layout/topbar.css
+   Refined, compact header, enterprise-grade appearance
+*/
+
+/* Root header container */
+.topbar-root {
+  background: #ffffff;
+  border-bottom: 1px solid rgba(15,23,42,0.06);
+  box-shadow: 0 2px 8px rgba(2,8,23,0.04);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  /* ensure it sits above content */
+}
+
+/* inner wrapper: keep line-height tight */
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 12px;
+}
+
+/* BRAND section: slightly tighter spacing */
+.brand-section a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+.brand-section img {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: contain;
+  box-shadow: 0 1px 2px rgba(2,8,23,0.04);
+}
+
+/* Hide subtitle on smaller screens, keep brand compact */
+.brand-section .lg\:flex { /* tailwind escaped class shown in markup */
+  display: none;
+}
+@media (min-width: 1024px) {
+  .brand-section .lg\:flex { display: flex; flex-direction: column; gap: 2px; }
+}
+
+/* Page title area: left-aligned and compact */
+.title-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+.title-section .page-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a; /* slate-900 */
+  letter-spacing: 0.1px;
+}
+.title-section .breadcrumb {
+  color: #64748b; /* slate-400 */
+  font-size: 12px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* collapse breadcrumbs on small widths */
+@media (max-width: 1024px) {
+  .title-section .breadcrumb { display: none; }
+  .title-section { min-width: 120px; }
+}
+
+/* actions group (right) */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Notification / buttons: flatter, cleaner */
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  background: transparent;
+  border: none;
+}
+.actions button:hover {
+  transform: translateY(-1px);
+}
+
+/* Icon button shell */
+.actions .p-2 {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: white;
+  border: 1px solid rgba(15,23,42,0.04);
+  box-shadow: 0 6px 16px rgba(2,8,23,0.03);
+}
+
+/* notification badge: smaller and more refined */
+.notif-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #ef4444; /* rose-500 */
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  border: 2px solid #ffffff;
+}
+
+/* popover cards (notifications/account) */
+.notif-popover, .acct-popover {
+  position: absolute;
+  right: 0;
+  margin-top: 8px;
+  width: 18.5rem; /* 296px */
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(2,8,23,0.12);
+  z-index: 9999;
+  overflow: hidden;
+  border: 1px solid rgba(15,23,42,0.04);
+}
+
+/* account popover a little narrower */
+.acct-popover { width: 14rem; }
+
+/* avatar circle */
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #F46A5E 0%, #F45F57 100%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(244,95,87,0.12);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* small text utilities already used */
+.title-section .page-title,
+.brand-section .text-sm { line-height: 1.1; }
+
+/* responsive — reduce paddings on very small screens */
+@media (max-width: 640px) {
+  .topbar-inner { padding-left: 10px; padding-right: 10px; gap: 8px; }
+  .title-section .page-title { font-size: 15px; }
+  .brand-section img { width: 32px; height: 32px; }
+  .avatar { width: 32px; height: 32px; font-size: 12px; }
+}
+
+/* subtle hover for breadcrumb buttons */
+.breadcrumb button { background: transparent; border: none; color: inherit; cursor: pointer; }
+.breadcrumb button:hover { text-decoration: underline; color: #0f172a; }
+
+/* remove heavy outlines on focus, use subtle ring */
+.brand-section a:focus, .actions button:focus, .breadcrumb button:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(58,91,160,0.08);
+  border-radius: 8px;
+}
