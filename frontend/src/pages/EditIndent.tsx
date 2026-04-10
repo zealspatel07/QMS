@@ -16,6 +16,7 @@ interface Product {
 interface Item {
     product_id: number | null;
     product_name: string;
+    model_number?: string;
     product_description: string;
     quantity: number;
 }
