@@ -816,28 +816,59 @@ async function ensureQuotationVersionsTable() {
   let conn;
   try {
     conn = await db.getConnection();
+
+    // 1️⃣ Create table (if not exists)
     await conn.query(`
-        CREATE TABLE IF NOT EXISTS quotation_versions (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          quotation_id INT NOT NULL,
+      CREATE TABLE IF NOT EXISTS quotation_versions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        quotation_id INT NOT NULL,
 
-          version_major INT NOT NULL,
-          version_minor INT NOT NULL,
-          version_label VARCHAR(32),
+        version_major INT NOT NULL,
+        version_minor INT NOT NULL,
+        version_label VARCHAR(32),
 
-          items JSON,
-          subtotal DECIMAL(18,2),
-          tax DECIMAL(18,2),
-          total DECIMAL(18,2),
+        items JSON,
 
-          change_history JSON,
-          created_by INT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        -- ✅ FULL FINANCIAL SNAPSHOT
+        subtotal DECIMAL(18,2) DEFAULT 0,
+        total_discount DECIMAL(18,2) DEFAULT 0,
+        tax DECIMAL(18,2) DEFAULT 0,
+        total DECIMAL(18,2) DEFAULT 0,
 
-          FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE CASCADE,
-          INDEX idx_qv_qid (quotation_id)
-        ) ENGINE=INNODB;
+        change_history JSON,
+        created_by INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE CASCADE,
+        INDEX idx_qv_qid (quotation_id)
+      ) ENGINE=INNODB;
+    `);
+
+    // 2️⃣ BACKWARD COMPATIBILITY (VERY IMPORTANT)
+    const schema =
+      process.env.MYSQLDATABASE ||
+      process.env.MYSQL_DATABASE ||
+      DB_NAME;
+
+    const [cols] = await conn.query(
+      `SELECT COLUMN_NAME 
+       FROM information_schema.columns 
+       WHERE table_schema = ? 
+       AND table_name = 'quotation_versions'`,
+      [schema]
+    );
+
+    const existing = cols.map(c => c.COLUMN_NAME.toLowerCase());
+
+    // 3️⃣ ADD MISSING COLUMNS SAFELY
+    if (!existing.includes('total_discount')) {
+      await conn.query(`
+        ALTER TABLE quotation_versions
+        ADD COLUMN total_discount DECIMAL(18,2) DEFAULT 0
       `);
+      console.log('✅ Added total_discount to quotation_versions');
+    }
+
   } finally {
     if (conn) await conn.release();
   }
@@ -4111,32 +4142,31 @@ app.get('/api/quotations/:id/versions', authMiddleware, requireQuotationAccess, 
     // ✅ SAFE QUERY (NO LOGIC CHANGE)
     const [rows] = await conn.query(
       `
-      SELECT
-        qv.id,
-        qv.version_label AS version,
-        qv.items AS items_snapshot,
+     SELECT
+  qv.id,
+  qv.version_label AS version,
+  qv.items AS items_snapshot,
 
-        JSON_OBJECT(
-          'subtotal', IFNULL(qv.subtotal, 0),
-          'total_discount', IFNULL(qv.total_discount, 0),
-          'tax_total', IFNULL(qv.tax, 0),
-          'grand_total', IFNULL(qv.total, 0)
-        ) AS totals_snapshot,
+  JSON_OBJECT(
+    'subtotal', IFNULL(qv.subtotal, 0),
+    'total_discount', IFNULL(qv.total_discount, 0),
+    'tax_total', IFNULL(qv.tax, 0),
+    'grand_total', IFNULL(qv.total, 0)
+  ) AS totals_snapshot,
 
-        -- SAFE JSON extraction
-        CASE 
-          WHEN JSON_VALID(qv.change_history) 
-          THEN JSON_UNQUOTE(JSON_EXTRACT(qv.change_history, '$.comment'))
-          ELSE NULL
-        END AS comment,
+  CASE 
+    WHEN JSON_VALID(qv.change_history) 
+    THEN JSON_UNQUOTE(JSON_EXTRACT(qv.change_history, '$.comment'))
+    ELSE NULL
+  END AS comment,
 
-        u.name AS changed_by,
-        qv.created_at AS changed_at
+  u.name AS changed_by,
+  qv.created_at AS changed_at
 
-      FROM quotation_versions qv
-      LEFT JOIN users u ON u.id = qv.created_by
-      WHERE qv.quotation_id = ?
-      ORDER BY qv.created_at DESC
+FROM quotation_versions qv
+LEFT JOIN users u ON u.id = qv.created_by
+WHERE qv.quotation_id = '1'
+ORDER BY qv.created_at DESC;
       `,
       [id]
     );
