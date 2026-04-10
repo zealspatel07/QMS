@@ -979,15 +979,10 @@ async function runLegacyMigrationsFromIndexIfEnabled() {
     String(process.env.RUN_MIGRATIONS_ON_STARTUP || "").toLowerCase() === "true" ||
     String(process.env.RUN_MIGRATIONS_ON_STARTUP || "") === "1";
 
-  const isRailway =
-    Boolean(process.env.RAILWAY_ENVIRONMENT) ||
-    Boolean(process.env.RAILWAY_PROJECT_ID) ||
-    Boolean(process.env.RAILWAY_SERVICE_ID);
-
   let shouldRun = envFlagEnabled;
 
-  // Auto-heal on Railway: if core tables are missing, run migrations automatically.
-  if (!shouldRun && isRailway) {
+  // Auto-heal: if core tables are missing, run migrations automatically.
+  if (!shouldRun) {
     let conn;
     try {
       conn = await db.getConnection();
@@ -1002,9 +997,13 @@ async function runLegacyMigrationsFromIndexIfEnabled() {
         );
         const cnt = row ? Number(row.cnt || 0) : 0;
         if (cnt === 0) shouldRun = true;
+      } else {
+        // If schema name is not available yet, force migrations once.
+        shouldRun = true;
       }
     } catch (e) {
-      // If we can't check, don't block startup; migrations can be triggered via env flag.
+      // If metadata check fails, run migrations to self-heal.
+      shouldRun = true;
     } finally {
       if (conn) try { await conn.release(); } catch (e) { }
     }
