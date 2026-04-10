@@ -164,11 +164,9 @@ router.post("/vendors", authMiddleware, requireAdminOrSalesOrPurchase, async (re
         } = req.body;
 
         // Validate required fields
-        if (!gst_number || gst_number.length !== 15) {
-            return res.status(400).json({
-                error: "Valid GST number (15 digits) is required"
-            });
-        }
+        if (gst && gst.length !== 15) {
+            return res.status(400).json({ error: "GST must be 15 digits if provided" });
+          }
 
         if (!name || !name.trim()) {
             return res.status(400).json({
