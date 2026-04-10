@@ -199,7 +199,6 @@ export default function EditIndent() {
             {
                 product_id: null,
                 product_name: "",
-                
                 product_description: "",
                 quantity: 1,
             },
