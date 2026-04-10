@@ -170,7 +170,7 @@ export default function EditVendor() {
       setLoading(false);
     }
   }
-
+  
   useEffect(() => {
     if (id) {
       loadVendor();

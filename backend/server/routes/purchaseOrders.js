@@ -126,18 +126,22 @@ router.post("/purchase-orders", authMiddleware, requirePOCreation, async (req, r
 
         // --------------------------------------------------
         // ✅ Generate PO Number (FY Based, with 3-digit sequence)
+        // ✅ FIXED: Get MAX sequence instead of COUNT to avoid duplicates
         // --------------------------------------------------
-        const [countRows] = await conn.query(
+        const [maxRows] = await conn.query(
             `
-            SELECT COUNT(*) as total
+            SELECT MAX(CAST(SUBSTRING(po_number, 8) AS UNSIGNED)) as max_seq
             FROM purchase_orders
             WHERE po_number LIKE ?
             `,
             [`POS${fy}%`]
         );
 
-        const sequence = String(countRows[0].total + 1).padStart(3, "0");
+        const maxSequence = maxRows[0]?.max_seq || 0;
+        const sequence = String(maxSequence + 1).padStart(3, "0");
         const poNumber = `POS${fy}${sequence}`;
+        
+        console.log(`📍 PO Number Generation: FY=${fy}, MaxSeq=${maxSequence}, NewSeq=${sequence}, FinalPO=${poNumber}`);
 
         // --------------------------------------------------
         // ✅ Vendor Fetch (for backup/fallback)
@@ -284,31 +288,67 @@ router.post("/purchase-orders", authMiddleware, requirePOCreation, async (req, r
         const poId = poResult.insertId;
 
         // --------------------------------------------------
-        // ✅ Insert PO Items (WITH BATCH PRODUCT LOOKUP)
+        // ✅ Insert PO Items (WITH PRODUCT VALIDATION & AUTO-CREATION)
         // --------------------------------------------------
         const itemValues = [];
 
         console.log("🔍 ITEMS RECEIVED IN PO CREATE:", JSON.stringify(items, null, 2));
 
-        // ✅ FIX 1: BATCH PRODUCT LOOKUP (instead of individual queries)
-        // Extract all product names that don't have explicit product_id
-        const productNamesToLookup = items
-            .filter(item => !item.product_id && item.product_name)
-            .map(item => item.product_name);
+        // ✅ VALIDATE & AUTO-CREATE: Check/create products for all items
+        const validProductIds = new Map(); // Maps incoming product_id to actual database product_id
+        
+        // Collect all product references from items
+        const productsToProcess = items.map(item => ({
+            incoming_product_id: item.product_id || null,
+            product_name: item.product_name,
+            product_description: item.product_description || null,
+            uom: item.uom || 'NOS',
+            unit_price: Number(item.unit_price) || 0,
+            hsn_code: item.hsn_code || null
+        }));
 
-        const productLookupMap = {};
+        // Validate frontend product_ids first
+        const frontendProductIds = productsToProcess
+            .filter(p => p.incoming_product_id && p.incoming_product_id > 0)
+            .map(p => p.incoming_product_id);
 
-        if (productNamesToLookup.length > 0) {
-            const placeholders = productNamesToLookup.map(() => '?').join(',');
-            const [lookupResults] = await conn.query(
-                `SELECT id, name FROM products WHERE name IN (${placeholders})`,
-                productNamesToLookup
+        if (frontendProductIds.length > 0) {
+            const placeholders = frontendProductIds.map(() => '?').join(',');
+            const [existingProducts] = await conn.query(
+                `SELECT id, name FROM products WHERE id IN (${placeholders})`,
+                frontendProductIds
             );
-            console.log("📦 BATCH LOOKUP RESULTS:", lookupResults);
-            // Build lookup map
-            lookupResults.forEach(p => {
-                productLookupMap[p.name] = p.id;
+            existingProducts.forEach(p => {
+                validProductIds.set(p.id, p.id); // Maps incoming_id -> database_id
             });
+            console.log("✅ VALIDATED PRODUCT IDS:", Array.from(validProductIds.keys()));
+        }
+
+        // Auto-create products that don't exist in the database
+        for (const product of productsToProcess) {
+            if (!product.incoming_product_id) {
+                // Check if product exists by name
+                const [[existingByName]] = await conn.query(
+                    `SELECT id FROM products WHERE name = ? LIMIT 1`,
+                    [product.product_name]
+                );
+                
+                if (existingByName) {
+                    validProductIds.set(product.product_name, existingByName.id);
+                    console.log(`✅ Found product by name: "${product.product_name}" → ID: ${existingByName.id}`);
+                } else {
+                    // Create the product
+                    const [createResult] = await conn.query(
+                        `INSERT INTO products (name, description, uom, unit_price, hsn_code, status) 
+                         VALUES (?, ?, ?, ?, ?, 'active')`,
+                        [product.product_name, product.product_description, product.uom, product.unit_price, product.hsn_code]
+                    );
+                    validProductIds.set(product.product_name, createResult.insertId);
+                    console.log(`🆕 AUTO-CREATED product: "${product.product_name}" → ID: ${createResult.insertId}`);
+                }
+            } else if (!validProductIds.has(product.incoming_product_id)) {
+                console.warn(`⚠️ Product ID ${product.incoming_product_id} not found, but will continue`);
+            }
         }
 
         for (const item of items) {
@@ -329,14 +369,18 @@ router.post("/purchase-orders", authMiddleware, requirePOCreation, async (req, r
 
             const lineTotal = qty * price;
 
-            // ✅ FIX 2: Use product_id from item, or from batch lookup
-            let productId = item.product_id || productLookupMap[item.product_name] || null;
-
-            // ✅ FIX 3: Better logging for product resolution
-            if (productId) {
-                console.log(`✅ Product resolved: "${item.product_name}" → ID: ${productId}`);
+            // ✅ Get product_id from validation map
+            let productId = null;
+            
+            if (item.product_id && item.product_id > 0 && validProductIds.has(item.product_id)) {
+                productId = validProductIds.get(item.product_id);
+                console.log(`✅ Using product_id: ${item.product_id} (validated)`);
+            } else if (validProductIds.has(item.product_name)) {
+                productId = validProductIds.get(item.product_name);
+                console.log(`✅ Product resolved (by name): "${item.product_name}" → ID: ${productId}`);
             } else {
-                console.warn(`⚠️ Product NOT found in database: "${item.product_name}" (will insert without product_id)`);
+                console.warn(`⚠️ No product found: "${item.product_name}" - will insert with NULL product_id`);
+                productId = null;
             }
 
             itemValues.push([
@@ -542,6 +586,7 @@ router.get("/purchase-orders/export", authMiddleware, async (req, res) => {
             SELECT
                 po.id,
                 po.po_number,
+                po.created_at,
                 po.order_date,
                 po.delivery_date,
                 po.status,
@@ -557,7 +602,7 @@ router.get("/purchase-orders/export", authMiddleware, async (req, res) => {
 
         // ✅ DATE FILTER
         if (from && to) {
-            conditions.push(`DATE(po.order_date) BETWEEN ? AND ?`);
+            conditions.push(`DATE(po.created_at) BETWEEN ? AND ?`);
             params.push(from, to);
         }
 
@@ -572,9 +617,11 @@ router.get("/purchase-orders/export", authMiddleware, async (req, res) => {
             query += " WHERE " + conditions.join(" AND ");
         }
 
-        query += ` ORDER BY po.order_date DESC, po.po_number DESC`;
+        query += ` ORDER BY po.created_at DESC, po.po_number DESC`;
 
+        console.log("📋 EXPORT QUERY:", query);
         const [poHeaders] = await conn.query(query, params);
+        console.log("📊 RAW QUERY RESULT (first PO):", poHeaders.length > 0 ? JSON.stringify(poHeaders[0], null, 2) : "NO DATA");
 
         // ===============================
         // ❌ NO DATA CASE
@@ -620,6 +667,7 @@ router.get("/purchase-orders/export", authMiddleware, async (req, res) => {
 
             poData = poHeaders.map(po => ({
                 ...po,
+                po_date: po.created_at, // ✅ USE created_at as the display date
                 items: itemsMap[po.id] || []
             }));
 
@@ -627,11 +675,13 @@ router.get("/purchase-orders/export", authMiddleware, async (req, res) => {
             // SUMMARY MODE
             poData = poHeaders.map(po => ({
                 ...po,
+                po_date: po.created_at, // ✅ USE created_at as the display date
                 items: []
             }));
         }
 
         console.log("📄 GENERATE CSV");
+        console.log("🔍 DEBUG - Sample PO Data (first PO):", JSON.stringify(poData[0], null, 2));
         const csv = buildPOCsv(poData, type);
 
         // ===============================
@@ -683,13 +733,13 @@ router.get("/purchase-orders/:id", authMiddleware, requirePOAccess, async (req, 
                 po.id,
                 po.po_number,
                  po.terms_snapshot,
-                po.order_date,
+                DATE_FORMAT(po.order_date, '%Y-%m-%d') AS order_date,
                 po.status,
                 po.indent_id,
 
                 i.indent_number,
 
-                -- Vendor snapshot
+                -- Vendor snapshot (fallback)
                 po.vendor_name,
                 po.vendor_gst,
                 po.vendor_state_code,
@@ -697,17 +747,17 @@ router.get("/purchase-orders/:id", authMiddleware, requirePOAccess, async (req, 
                 po.contact_email,
                 po.contact_phone,
 
-                po.vendor_address,
-po.vendor_city,
-po.vendor_state,
-po.vendor_country,
-
+                -- Use current vendor address from vendors table if available, else use snapshot
+                COALESCE(v.address, po.vendor_address) AS vendor_address,
+                COALESCE(v.city, po.vendor_city) AS vendor_city,
+                COALESCE(v.state, po.vendor_state) AS vendor_state,
+                COALESCE(v.country, po.vendor_country) AS vendor_country,
 
                 -- Quotation / Financial fields
                 po.vendor_quote_no,
-                po.vendor_quote_date,
+                DATE_FORMAT(po.vendor_quote_date, '%Y-%m-%d') AS vendor_quote_date,
                 po.payment_terms,
-                po.delivery_date,
+                DATE_FORMAT(po.delivery_date, '%Y-%m-%d') AS delivery_date,
                 po.remarks,
                 po.discount_percentage,
                 po.gst_rate,
@@ -717,6 +767,13 @@ po.vendor_country,
 
             LEFT JOIN indents i
                 ON i.id = po.indent_id
+
+            LEFT JOIN vendors v
+                ON v.id = (
+                    SELECT vendor_id FROM po_items 
+                    WHERE po_id = po.id 
+                    LIMIT 1
+                )
 
             WHERE po.id = ?
             `,
@@ -736,9 +793,9 @@ po.vendor_country,
                 pi.id,
                 pi.product_id,
                 pi.indent_item_id,
-                -- ✅ Use product details from products table if available, fallback to stored snapshot
-                COALESCE(p.name, pi.product_name) AS product_name,
-                COALESCE(p.description, pi.product_description) AS product_description,
+                -- ✅ Use PO-specific description first (what was quoted), fallback to product master
+                COALESCE(pi.product_name, p.name) AS product_name,
+                COALESCE(pi.product_description, p.description) AS product_description,
 
                 pi.ordered_qty,
                 COALESCE(p.uom, pi.uom) AS uom,                -- ✅ IMPORTANT - Use latest from products if available
@@ -952,17 +1009,17 @@ router.put("/po-items/:id/receive", authMiddleware, requirePOCreation, async (re
             `UPDATE purchase_orders
              SET status =
              CASE
-               WHEN EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status='partial'
-               )
-               THEN 'partial'
-
                WHEN NOT EXISTS (
                    SELECT 1 FROM po_items
                    WHERE po_id=? AND status!='completed'
                )
                THEN 'completed'
+
+               WHEN EXISTS (
+                   SELECT 1 FROM po_items
+                   WHERE po_id=? AND status='completed'
+               )
+               THEN 'partial'
 
                ELSE 'pending'
              END
@@ -1102,17 +1159,17 @@ router.post('/po-items/:id/complete', authMiddleware, requirePOCreation, async (
             `UPDATE purchase_orders
              SET status =
              CASE
-               WHEN EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status='partial'
-               )
-               THEN 'partial'
-
                WHEN NOT EXISTS (
                    SELECT 1 FROM po_items
                    WHERE po_id=? AND status!='completed'
                )
                THEN 'completed'
+
+               WHEN EXISTS (
+                   SELECT 1 FROM po_items
+                   WHERE po_id=? AND status='completed'
+               )
+               THEN 'partial'
 
                ELSE 'pending'
              END
@@ -1199,6 +1256,19 @@ router.put("/purchase-orders/:id", authMiddleware, requirePOCreation, async (req
         if (hasReceived.count > 0) {
             throw new Error("Cannot edit PO after material received");
         }
+
+        // --------------------------------------------------
+        // 🔵 GET EXISTING ITEM IDs BEFORE PROCESSING
+        // --------------------------------------------------
+        const [[existingItemsData]] = await conn.query(`
+            SELECT GROUP_CONCAT(id) as ids
+            FROM po_items
+            WHERE po_id = ?
+        `, [poId]);
+
+        const existingIds = existingItemsData?.ids 
+            ? existingItemsData.ids.split(',').map(id => parseInt(id, 10))
+            : [];
 
         // --------------------------------------------------
         // ✅ PROCESS ITEMS (UPDATE / INSERT)
@@ -1307,6 +1377,25 @@ router.put("/purchase-orders/:id", authMiddleware, requirePOCreation, async (req
         }
 
         // --------------------------------------------------
+        // 🔵 DELETE REMOVED ITEMS
+        // --------------------------------------------------
+        // Get all INCOMING item IDs (only items with actual DB IDs, not new items)
+        const incomingItemIds = items
+            .filter(item => item.id) // Only existing items with IDs
+            .map(item => item.id);
+
+        // Delete items that EXISTED before but are NOT in the new request
+        const itemsToDelete = existingIds.filter(id => !incomingItemIds.includes(id));
+
+        if (itemsToDelete.length > 0) {
+            await conn.query(`
+                DELETE FROM po_items
+                WHERE po_id = ? AND id IN (?)
+            `, [poId, itemsToDelete]);
+            console.log(`[PO Update] Deleted ${itemsToDelete.length} items:`, itemsToDelete);
+        }
+
+        // --------------------------------------------------
         // ✅ UPDATE PO HEADER WITH PRIMARY VENDOR INFO & USER FIELDS
         // --------------------------------------------------
         // Get the primary vendor (first item's vendor)
@@ -1322,7 +1411,9 @@ router.put("/purchase-orders/:id", authMiddleware, requirePOCreation, async (req
                 SELECT 
                     name,
                     gst_number,
-                    state
+                    state,
+                    address,
+                    city
                 FROM vendors
                 WHERE id = ?
             `, [primaryItem.vendor_id]);
@@ -1335,6 +1426,8 @@ router.put("/purchase-orders/:id", authMiddleware, requirePOCreation, async (req
                         vendor_name = ?,
                         vendor_gst = ?,
                         vendor_state_code = ?,
+                        vendor_address = ?,
+                        vendor_city = ?,
                         vendor_quote_no = COALESCE(?, vendor_quote_no),
                         vendor_quote_date = COALESCE(?, vendor_quote_date),
                         delivery_date = COALESCE(?, delivery_date),
@@ -1346,6 +1439,8 @@ router.put("/purchase-orders/:id", authMiddleware, requirePOCreation, async (req
                     vendorData.name,
                     vendorData.gst_number || "",
                     vendorData.state || "",
+                    vendorData.address || "",
+                    vendorData.city || "",
                     vendorQuoteNo || null,
                     vendorQuoteDate || null,
                     deliveryDate || null,
@@ -1430,6 +1525,15 @@ router.post("/purchase-orders/:id/close", authMiddleware, async (req, res) => {
 
 function buildPOCsv(poData, type = "detailed") {
 
+    console.log("🔍 buildPOCsv DEBUG:");
+    console.log("  - Total POs:", poData.length);
+    if (poData.length > 0) {
+        console.log("  - First PO keys:", Object.keys(poData[0]));
+        console.log("  - First PO po_date (created_at):", poData[0].po_date);
+        console.log("  - First PO order_date:", poData[0].order_date);
+        console.log("  - First PO delivery_date:", poData[0].delivery_date);
+    }
+
     // ===============================
     // 📄 HEADER BASED ON TYPE
     // ===============================
@@ -1461,12 +1565,49 @@ function buildPOCsv(poData, type = "detailed") {
     // ===============================
     // 🔁 LOOP
     // ===============================
-    poData.forEach(po => {
+    poData.forEach((po, idx) => {
 
-        // ✅ SAFE DATE FORMAT (NO TIMEZONE ISSUE)
+        // ✅ SAFE DATE FORMAT (FULL DATETIME)
         const formatDate = (d) => {
-            if (!d) return "";
-            return String(d).split("T")[0]; // YYYY-MM-DD safe
+            if (!d) {
+                console.log(`  ⚠️ Empty date for PO ${po.po_number}:`, d);
+                return "";
+            }
+            try {
+                let date;
+                
+                if (d instanceof Date) {
+                    date = d;
+                } else {
+                    const dateStr = String(d).trim();
+                    date = new Date(dateStr);
+                }
+                
+                if (isNaN(date.getTime())) {
+                    console.log(`  ❌ Invalid date for PO ${po.po_number}:`, d);
+                    return "";
+                }
+                
+                // Format as "Wed Apr 08 2026 10:23:40"
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                
+                const dayName = days[date.getDay()];
+                const monthName = months[date.getMonth()];
+                const dayNum = String(date.getDate()).padStart(2, '0');
+                const year = date.getFullYear();
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                
+                const formatted = `${dayName} ${monthName} ${dayNum} ${year} ${hours}:${minutes}:${seconds}`;
+                
+                console.log(`  ✅ Formatted date for PO ${po.po_number}: ${String(d)} -> ${formatted}`);
+                return formatted;
+            } catch (e) {
+                console.log(`  ❌ Error formatting date for PO ${po.po_number}:`, e.message);
+                return "";
+            }
         };
 
         // ===============================
@@ -1475,7 +1616,7 @@ function buildPOCsv(poData, type = "detailed") {
         if (type === "summary") {
             lines.push([
                 escapeCsvField(po.po_number),
-                formatDate(po.order_date),
+                formatDate(po.po_date),
                 escapeCsvField(po.vendor_name),
                 Number(po.total_amount || 0).toFixed(2),
                 escapeCsvField(po.status)
@@ -1506,7 +1647,7 @@ function buildPOCsv(poData, type = "detailed") {
 
                 lines.push([
                     escapeCsvField(po.po_number),
-                    formatDate(po.order_date),
+                    formatDate(po.po_date),
                     formatDate(po.delivery_date),
                     escapeCsvField(po.vendor_name),
                     escapeCsvField(item.product_name),
@@ -1536,7 +1677,7 @@ function buildPOCsv(poData, type = "detailed") {
             // NO ITEMS
             lines.push([
                 escapeCsvField(po.po_number),
-                formatDate(po.order_date),
+                formatDate(po.po_date),
                 formatDate(po.delivery_date),
                 escapeCsvField(po.vendor_name),
                 "", "", "", "", "", "", "",

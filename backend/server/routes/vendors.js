@@ -274,6 +274,7 @@ router.post("/vendors", authMiddleware, requireAdminOrSalesOrPurchase, async (re
 });
 
 
+
 /*
 ---------------------------------------
 VENDOR CONTACTS
@@ -303,7 +304,7 @@ router.get("/vendors/:id/contacts", authMiddleware, requireVendorAccess, async (
     } catch (err) {
 
         console.error(err);
-        res.status(500).json({ error: "Failed to fetch contacts" });
+        res.status(500).json({ error: "Failed to fetch contacts" }); 
 
     } finally {
 
