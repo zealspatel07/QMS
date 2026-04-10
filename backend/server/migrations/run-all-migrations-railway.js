@@ -57,7 +57,13 @@ function listMigrationFiles(migrationsDir) {
 
   return fs
     .readdirSync(migrationsDir)
-    .filter((f) => f.endsWith(".js") && !blacklist.has(f))
+    .filter((f) => {
+      if (!f.endsWith(".js") || blacklist.has(f)) return false;
+      const m = /^(\d+)_/.exec(f);
+      if (!m) return false;
+      const n = Number(m[1]);
+      return Number.isFinite(n) && n >= 1 && n <= 20;
+    })
     .sort();
 }
 

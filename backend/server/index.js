@@ -10,6 +10,7 @@ const cors = require('cors');
 const { DB_NAME, ...db } = require('./db'); // must expose getConnection() and endPool()
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { spawnSync } = require("child_process");
 
 console.log("DB ENV CHECK:", {
   DB_HOST: process.env.DB_HOST,
@@ -973,9 +974,32 @@ async function ensureAppSettingsTable() {
 
 // ---------- DB schema initialization (RUN ONCE AT STARTUP) ----------
 
+async function runLegacyMigrationsFromIndexIfEnabled() {
+  const shouldRun =
+    String(process.env.RUN_MIGRATIONS_ON_STARTUP || "").toLowerCase() === "true" ||
+    String(process.env.RUN_MIGRATIONS_ON_STARTUP || "") === "1";
+
+  if (!shouldRun) return;
+
+  console.log("🧱 RUN_MIGRATIONS_ON_STARTUP enabled. Running migrations 01→20...");
+
+  const runnerPath = path.join(__dirname, "migrations", "run-all-migrations-railway.js");
+  const res = spawnSync(process.execPath, [runnerPath], {
+    stdio: "inherit",
+    env: process.env,
+  });
+
+  const code = typeof res.status === "number" ? res.status : 1;
+  if (code !== 0) {
+    throw new Error(`Migrations failed (exit code ${code})`);
+  }
+
+  console.log("✅ Migrations completed.");
+}
 
 (async function initDatabaseSchema() {
   try {
+    await runLegacyMigrationsFromIndexIfEnabled();
     console.log('Initializing database schema...');
     await ensureUsersTable();
     await ensureCustomersTable();
