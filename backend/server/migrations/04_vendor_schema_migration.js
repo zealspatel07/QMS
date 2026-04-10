@@ -60,6 +60,7 @@ async function addColumn(conn, table, column, definition) {
 
 async function runVendorMigration() {
   let conn;
+  let hasError = false;
 
   try {
     console.log('\n========================================');
@@ -224,11 +225,18 @@ async function runVendorMigration() {
     console.log('========================================\n');
 
   } catch (err) {
+    hasError = true;
     console.error('\n❌ MIGRATION ERROR:', err.message);
     console.error('\nFull error:', err);
-    process.exit(1);
   } finally {
-    if (conn) conn.release();
+    if (conn) {
+      try { await conn.release(); } catch (e) { }
+    }
+    try { await db.endPool(); } catch (e) { }
+  }
+
+  if (hasError) {
+    process.exitCode = 1;
   }
 }
 
