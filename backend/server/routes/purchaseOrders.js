@@ -140,7 +140,7 @@ router.post("/purchase-orders", authMiddleware, requirePOCreation, async (req, r
         const maxSequence = maxRows[0]?.max_seq || 0;
         const sequence = String(maxSequence + 1).padStart(3, "0");
         const poNumber = `POS${fy}${sequence}`;
-        
+
         console.log(`📍 PO Number Generation: FY=${fy}, MaxSeq=${maxSequence}, NewSeq=${sequence}, FinalPO=${poNumber}`);
 
         // --------------------------------------------------
@@ -296,7 +296,7 @@ router.post("/purchase-orders", authMiddleware, requirePOCreation, async (req, r
 
         // ✅ VALIDATE & AUTO-CREATE: Check/create products for all items
         const validProductIds = new Map(); // Maps incoming product_id to actual database product_id
-        
+
         // Collect all product references from items
         const productsToProcess = items.map(item => ({
             incoming_product_id: item.product_id || null,
@@ -332,7 +332,7 @@ router.post("/purchase-orders", authMiddleware, requirePOCreation, async (req, r
                     `SELECT id FROM products WHERE name = ? LIMIT 1`,
                     [product.product_name]
                 );
-                
+
                 if (existingByName) {
                     validProductIds.set(product.product_name, existingByName.id);
                     console.log(`✅ Found product by name: "${product.product_name}" → ID: ${existingByName.id}`);
@@ -371,7 +371,7 @@ router.post("/purchase-orders", authMiddleware, requirePOCreation, async (req, r
 
             // ✅ Get product_id from validation map
             let productId = null;
-            
+
             if (item.product_id && item.product_id > 0 && validProductIds.has(item.product_id)) {
                 productId = validProductIds.get(item.product_id);
                 console.log(`✅ Using product_id: ${item.product_id} (validated)`);
@@ -1007,23 +1007,26 @@ router.put("/po-items/:id/receive", authMiddleware, requirePOCreation, async (re
         await conn.query(
 
             `UPDATE purchase_orders
-             SET status =
-             CASE
-               WHEN NOT EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status!='completed'
-               )
-               THEN 'completed'
+SET status =
+CASE
+  -- ✅ COMPLETED: All items fully received
+  WHEN NOT EXISTS (
+      SELECT 1 FROM po_items
+      WHERE po_id = ? AND received_qty < ordered_qty
+  )
+  THEN 'completed'
 
-               WHEN EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status='completed'
-               )
-               THEN 'partial'
+  -- ✅ PARTIAL: At least one item has some receipt
+  WHEN EXISTS (
+      SELECT 1 FROM po_items
+      WHERE po_id = ? AND received_qty > 0
+  )
+  THEN 'partial'
 
-               ELSE 'pending'
-             END
-             WHERE id=?`,
+  -- ✅ CREATED: No items received
+  ELSE 'created'
+END
+WHERE id = ?`,
 
             [poId, poId, poId]
 
@@ -1266,7 +1269,7 @@ router.put("/purchase-orders/:id", authMiddleware, requirePOCreation, async (req
             WHERE po_id = ?
         `, [poId]);
 
-        const existingIds = existingItemsData?.ids 
+        const existingIds = existingItemsData?.ids
             ? existingItemsData.ids.split(',').map(id => parseInt(id, 10))
             : [];
 
@@ -1575,23 +1578,23 @@ function buildPOCsv(poData, type = "detailed") {
             }
             try {
                 let date;
-                
+
                 if (d instanceof Date) {
                     date = d;
                 } else {
                     const dateStr = String(d).trim();
                     date = new Date(dateStr);
                 }
-                
+
                 if (isNaN(date.getTime())) {
                     console.log(`  ❌ Invalid date for PO ${po.po_number}:`, d);
                     return "";
                 }
-                
+
                 // Format as "Wed Apr 08 2026 10:23:40"
                 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                
+
                 const dayName = days[date.getDay()];
                 const monthName = months[date.getMonth()];
                 const dayNum = String(date.getDate()).padStart(2, '0');
@@ -1599,9 +1602,9 @@ function buildPOCsv(poData, type = "detailed") {
                 const hours = String(date.getHours()).padStart(2, '0');
                 const minutes = String(date.getMinutes()).padStart(2, '0');
                 const seconds = String(date.getSeconds()).padStart(2, '0');
-                
+
                 const formatted = `${dayName} ${monthName} ${dayNum} ${year} ${hours}:${minutes}:${seconds}`;
-                
+
                 console.log(`  ✅ Formatted date for PO ${po.po_number}: ${String(d)} -> ${formatted}`);
                 return formatted;
             } catch (e) {
