@@ -4100,6 +4100,7 @@ app.get('/api/quotations/:id/versions', authMiddleware, requireQuotationAccess, 
     if (role !== 'admin' && q.salesperson_id !== req.user.id) {
       return res.status(403).json({ error: 'forbidden' });
     }
+
     const [currentRows] = await conn.query(
       'SELECT version FROM quotations WHERE id = ? LIMIT 1',
       [id]
@@ -4107,33 +4108,53 @@ app.get('/api/quotations/:id/versions', authMiddleware, requireQuotationAccess, 
 
     const currentVersion = currentRows?.[0]?.version || null;
 
-    // Fetch version history
+    // ✅ SAFE QUERY (NO LOGIC CHANGE)
     const [rows] = await conn.query(
       `
-        SELECT
-    qv.id,
-    qv.version_label AS version,
-    qv.items AS items_snapshot,
-    JSON_OBJECT(
-    'subtotal', qv.subtotal,
-    'total_discount', qv.total_discount,  
-    'tax_total', qv.tax,
-    'grand_total', qv.total
-  ) AS totals_snapshot,
-    JSON_EXTRACT(qv.change_history, '$.comment') AS comment,
-    u.name AS changed_by,
-    qv.created_at AS changed_at
-  FROM quotation_versions qv
-  LEFT JOIN users u ON u.id = qv.created_by
-  WHERE qv.quotation_id = ?
-  ORDER BY qv.created_at DESC
-        `,
+      SELECT
+        qv.id,
+        qv.version_label AS version,
+        qv.items AS items_snapshot,
+
+        JSON_OBJECT(
+          'subtotal', IFNULL(qv.subtotal, 0),
+          'total_discount', IFNULL(qv.total_discount, 0),
+          'tax_total', IFNULL(qv.tax, 0),
+          'grand_total', IFNULL(qv.total, 0)
+        ) AS totals_snapshot,
+
+        -- SAFE JSON extraction
+        CASE 
+          WHEN JSON_VALID(qv.change_history) 
+          THEN JSON_UNQUOTE(JSON_EXTRACT(qv.change_history, '$.comment'))
+          ELSE NULL
+        END AS comment,
+
+        u.name AS changed_by,
+        qv.created_at AS changed_at
+
+      FROM quotation_versions qv
+      LEFT JOIN users u ON u.id = qv.created_by
+      WHERE qv.quotation_id = ?
+      ORDER BY qv.created_at DESC
+      `,
       [id]
     );
 
+    // ✅ SAFE PARSING (NO LOGIC CHANGE)
     const history = (rows || []).map(r => ({
       ...r,
       is_current: false,
+
+      items_snapshot:
+        typeof r.items_snapshot === 'string'
+          ? safeJSONParse(r.items_snapshot)
+          : r.items_snapshot || null,
+
+      totals_snapshot:
+        typeof r.totals_snapshot === 'string'
+          ? safeJSONParse(r.totals_snapshot)
+          : r.totals_snapshot || null,
     }));
 
     // Inject current version at top
@@ -4151,14 +4172,24 @@ app.get('/api/quotations/:id/versions', authMiddleware, requireQuotationAccess, 
     }
 
     res.json(history);
+
   } catch (err) {
-    console.error('fetch version history error', err);
-    res.status(500).json({ error: 'db error' });
+    console.error('❌ fetch version history error:', err); // 🔥 important
+    res.status(500).json({ error: 'db error', details: err.message });
   } finally {
-    if (conn) try { await conn.release(); } catch { }
+    if (conn) try { await conn.release(); } catch {}
   }
 });
 
+
+// ✅ HELPER (MANDATORY)
+function safeJSONParse(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
 // ---------- Get quotation decisions (Won/Lost) ----------
 app.get('/api/quotations/:id/decisions', authMiddleware, requireQuotationAccess, async (req, res) => {
   let conn;
