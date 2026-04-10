@@ -980,6 +980,23 @@ async function runLegacyMigrationsFromIndexIfEnabled() {
     String(process.env.RUN_MIGRATIONS_ON_STARTUP || "") === "1";
 
   let shouldRun = envFlagEnabled;
+  const requiredMigrationTables = [
+    'indents',
+    'indent_items',
+    'indent_documents',
+    'vendors',
+    'vendor_contacts',
+    'vendor_performance',
+    'vendor_procurement_stats',
+    'purchase_orders',
+    'po_items',
+    'quotation_sequences',
+    'roles',
+    'user_roles',
+    'system_settings',
+    'email_logs',
+    'audit_logs',
+  ];
 
   // Auto-heal: if core tables are missing, run migrations automatically.
   if (!shouldRun) {
@@ -988,15 +1005,23 @@ async function runLegacyMigrationsFromIndexIfEnabled() {
       conn = await db.getConnection();
       const schema = process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || DB_NAME;
       if (schema) {
-        const [[row]] = await conn.query(
-          `SELECT COUNT(*) AS cnt
+        const placeholders = requiredMigrationTables.map(() => '?').join(', ');
+        const [rows] = await conn.query(
+          `SELECT table_name
              FROM information_schema.tables
             WHERE table_schema = ?
-              AND table_name = 'indents'`,
-          [schema]
+              AND table_name IN (${placeholders})`,
+          [schema, ...requiredMigrationTables]
         );
-        const cnt = row ? Number(row.cnt || 0) : 0;
-        if (cnt === 0) shouldRun = true;
+        const existingTables = new Set((rows || []).map((row) => String(row.table_name || row.TABLE_NAME || '').toLowerCase()));
+        const missingTables = requiredMigrationTables.filter(
+          (tableName) => !existingTables.has(tableName.toLowerCase())
+        );
+
+        if (missingTables.length > 0) {
+          shouldRun = true;
+          console.log('Missing migrated tables detected:', missingTables.join(', '));
+        }
       } else {
         // If schema name is not available yet, force migrations once.
         shouldRun = true;
