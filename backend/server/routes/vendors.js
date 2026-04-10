@@ -163,11 +163,26 @@ router.post("/vendors", authMiddleware, requireAdminOrSalesOrPurchase, async (re
             gst_number
         } = req.body;
 
-        // Validate required fields
-        if (gst && gst.length !== 15) {
-            return res.status(400).json({ error: "GST must be 15 digits if provided" });
-          }
+        // ✅ GST mandatory validation
+        if (!gst_number || !gst_number.trim()) {
+            return res.status(400).json({
+                error: "GST number is required"
+            });
+        }
 
+        // ✅ Normalize GST once (single source of truth)
+        const gst = gst_number.trim().toUpperCase();
+
+        // ✅ Format validation (India GST)
+        const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
+        if (!gstRegex.test(gst)) {
+            return res.status(400).json({
+                error: "Invalid GST format"
+            });
+        }
+
+        // ✅ Vendor name validation
         if (!name || !name.trim()) {
             return res.status(400).json({
                 error: "Vendor name is required"
@@ -178,8 +193,8 @@ router.post("/vendors", authMiddleware, requireAdminOrSalesOrPurchase, async (re
 
         // ✅ Step 1: Check for duplicate GST
         const [existingVendor] = await conn.query(
-            `SELECT id, name FROM vendors WHERE gst_number = ?`,
-            [gst_number.toUpperCase()]
+            `SELECT id, name FROM vendors WHERE gst_number = ? LIMIT 1`,
+            [gst]
         );
 
         if (existingVendor.length > 0) {
@@ -189,10 +204,9 @@ router.post("/vendors", authMiddleware, requireAdminOrSalesOrPurchase, async (re
             });
         }
 
-        // ✅ Step 2: Use user-provided vendor details (no GST API verification)
-        console.log(`📝 Creating vendor with manual entry for GST: ${gst_number}`);
+        console.log(`📝 Creating vendor with GST: ${gst}`);
 
-        // ✅ Step 3: Insert vendor without GST verification
+        // ✅ Step 2: Insert vendor
         const [result] = await conn.query(
             `
             INSERT INTO vendors
@@ -221,7 +235,7 @@ router.post("/vendors", authMiddleware, requireAdminOrSalesOrPurchase, async (re
                 city || null,
                 state || null,
                 country || "India",
-                gst_number.toUpperCase(),
+                gst, // ✅ ALWAYS use normalized value
                 0
             ]
         );
@@ -231,21 +245,25 @@ router.post("/vendors", authMiddleware, requireAdminOrSalesOrPurchase, async (re
         res.json({
             vendor_id: result.insertId,
             id: result.insertId,
-            name: name,
-            gst_number: gst_number.toUpperCase(),
-            phone,
-            email,
-            address,
-            city,
-            state,
+            name: name.trim(),
+            gst_number: gst, // ✅ consistent response
+            phone: phone || null,
+            email: email || null,
+            address: address || null,
+            city: city || null,
+            state: state || null,
             country: country || "India",
             message: "Vendor created successfully"
         });
 
     } catch (err) {
 
-        console.error("Vendor creation error:", err);
-        res.status(500).json({ error: "Failed to create vendor", details: err.message });
+        console.error("❌ Vendor creation error:", err);
+
+        res.status(500).json({
+            error: "Failed to create vendor",
+            details: err.message
+        });
 
     } finally {
 
@@ -285,7 +303,7 @@ router.get("/vendors/:id/contacts", authMiddleware, requireVendorAccess, async (
     } catch (err) {
 
         console.error(err);
-        res.status(500).json({ error: "Failed to fetch contacts" }); 
+        res.status(500).json({ error: "Failed to fetch contacts" });
 
     } finally {
 
