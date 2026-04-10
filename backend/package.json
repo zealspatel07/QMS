@@ -4,7 +4,9 @@
   "private": true,
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "migrate:railway": "node server/migrations/run-all-migrations-railway.js",
+    "schema:verify": "node server/migrations/verify-schema.js"
   },
   "dependencies": {
     "axios": "^1.14.0",
