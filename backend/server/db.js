@@ -7,7 +7,7 @@ function initPool() {
   if (pool) return pool;
 
   // ✅ PRODUCTION (Railway)
-  if (process.env.DATABASE_URL) {
+  if (process.env.MYSQL_URL) {
     console.log("Using Railway DATABASE_URL");
 
     pool = mysql.createPool(process.env.DATABASE_URL);
