@@ -10,7 +10,7 @@ function initPool() {
   if (process.env.MYSQL_URL) {
     console.log("Using Railway DATABASE_URL");
 
-    pool = mysql.createPool(process.env.DATABASE_URL);
+    pool = mysql.createPool(process.env.MYSQL_URL);
     return pool;
   }
 
@@ -30,11 +30,11 @@ function initPool() {
   }
 
   pool = mysql.createPool({
-    host: DB_HOST,
-    user: DB_USER,
-    password: DB_PASSWORD || "",
-    database: DB_NAME,
-    port: Number(DB_PORT || 3306),
+    host: url.hostname,
+    user: url.username,
+    password: url.password,
+    database: url.pathname.replace("/", ""),
+    port: url.port || 3306,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
