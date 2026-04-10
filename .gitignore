@@ -22,3 +22,8 @@ yarn-error.log*
 Thumbs.db
 .vscode
 .idea
+
+backend/uploads/
+frontend/dist/
+node_modules/
+.env
