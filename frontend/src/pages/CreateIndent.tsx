@@ -50,9 +50,13 @@ export default function CreateIndent() {
 
     const [newVendor, setNewVendor] = useState({
         name: "",
+        contact_person: "",
         gst_number: "",
         phone: "",
         email: "",
+        address: "",
+        city: "",
+        state: "",
     });
 
     const today = new Date().toISOString().split("T")[0];
@@ -307,6 +311,23 @@ export default function CreateIndent() {
         }
     }
 
+    function handleVendorModalGst(value: string) {
+        setNewVendor(prev => ({ ...prev, gst_number: value.toUpperCase() }));
+    }
+
+    function resetNewVendor() {
+        setNewVendor({
+            name: "",
+            contact_person: "",
+            gst_number: "",
+            phone: "",
+            email: "",
+            address: "",
+            city: "",
+            state: "",
+        });
+    }
+
     async function createVendor() {
         if (!newVendor.name.trim()) {
             toast.error("Vendor name required");
@@ -324,6 +345,7 @@ export default function CreateIndent() {
             setVendors(prev => [...prev, created]);
             setPreferredVendor(created.name);
 
+            resetNewVendor();
             setShowVendorModal(false);
             toast.success("Vendor created successfully!");
 
@@ -476,9 +498,13 @@ export default function CreateIndent() {
         c.company_name.toLowerCase().includes(customerName.toLowerCase())
     );
 
-    const filteredVendors = vendors.filter((v) =>
-        v.name.toLowerCase().includes(preferredVendor.toLowerCase())
+    const VENDOR_DROPDOWN_LIST_CAP = 80;
+    const vendorSearch = preferredVendor.toLowerCase();
+    const vendorMatches = vendors.filter((v) =>
+        v.name.toLowerCase().includes(vendorSearch)
     );
+    const vendorMatchesTruncated = vendorMatches.length > VENDOR_DROPDOWN_LIST_CAP;
+    const filteredVendors = vendorMatches.slice(0, VENDOR_DROPDOWN_LIST_CAP);
 
     const totalProducts = items.filter(i => i.product_id).length;
     const totalQty = items.reduce((sum, i) => sum + (i.product_id ? i.quantity : 0), 0);
@@ -594,30 +620,56 @@ export default function CreateIndent() {
                                             onFocus={() => setShowVendorDropdown(true)}
                                         />
                                         {showVendorDropdown && (
-                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-auto z-10">
-                                                {filteredVendors.map((v) => (
+                                            <div className="absolute top-full left-0 right-0 mt-1 z-30 flex max-h-72 flex-col overflow-hidden rounded-lg border border-gray-300 bg-white shadow-lg">
+                                                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                                                    {filteredVendors.length === 0 ? (
+                                                        <div className="px-4 py-3 text-sm text-gray-500">
+                                                            No vendors match your search
+                                                        </div>
+                                                    ) : (
+                                                        filteredVendors.map((v) => (
+                                                            <button
+                                                                key={v.id}
+                                                                type="button"
+                                                                className="w-full text-left px-4 py-2 hover:bg-blue-50 transition-colors"
+                                                                onClick={() => {
+                                                                    setPreferredVendor(v.name);
+                                                                    setShowVendorDropdown(false);
+                                                                }}
+                                                            >
+                                                                <div className="font-medium text-gray-900">{v.name}</div>
+                                                            </button>
+                                                        ))
+                                                    )}
+                                                    {vendorMatchesTruncated && (
+                                                        <div className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+                                                            Showing first {VENDOR_DROPDOWN_LIST_CAP} of {vendorMatches.length} matches.
+                                                            Type more to narrow the list.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="shrink-0 border-t border-gray-200 bg-slate-50">
                                                     <button
-                                                        key={v.id}
                                                         type="button"
-                                                        className="w-full text-left px-4 py-2 hover:bg-blue-50 transition-colors"
+                                                        className="w-full px-4 py-2.5 text-left text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
                                                         onClick={() => {
-                                                            setPreferredVendor(v.name);
                                                             setShowVendorDropdown(false);
+                                                            setNewVendor({
+                                                                name: preferredVendor.trim(),
+                                                                contact_person: "",
+                                                                gst_number: "",
+                                                                phone: "",
+                                                                email: "",
+                                                                address: "",
+                                                                city: "",
+                                                                state: "",
+                                                            });
+                                                            setShowVendorModal(true);
                                                         }}
                                                     >
-                                                        <div className="font-medium text-gray-900">{v.name}</div>
+                                                        + Create New Vendor
                                                     </button>
-                                                ))}
-                                                <button
-                                                    type="button"
-                                                    className="w-full text-left px-4 py-2 text-blue-600 hover:bg-blue-50 border-t border-gray-200 font-medium transition-colors"
-                                                    onClick={() => {
-                                                        setShowVendorModal(true);
-                                                        setShowVendorDropdown(false);
-                                                    }}
-                                                >
-                                                    + Create New Vendor
-                                                </button>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -1260,116 +1312,153 @@ export default function CreateIndent() {
 
                     {/* VENDOR MODAL */}
                     {showVendorModal && (
-                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full animate-in fade-in zoom-in-95">
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
 
-                                {/* HEADER */}
-                                <div className="px-6 py-5 border-b border-gray-200">
-                                    <h2 className="text-xl font-semibold text-gray-900">
-                                        Create New Vendor
-                                    </h2>
-                                    <p className="text-sm text-gray-500 mt-1">
-                                        Add vendor details for procurement
-                                    </p>
+                                <div className="px-6 py-5 border-b border-slate-200 flex items-start gap-3">
+                                    <div className="p-2.5 bg-blue-100 rounded-xl shrink-0">
+                                        <svg className="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+                                            <path d="M8 16.5a1 1 0 11-2 0 1 1 0 012 0z" />
+                                            <path fillRule="evenodd" d="M1 6.912V19a3 3 0 003 3h12a3 3 0 003-3V6.912A3 3 0 0016.05 3.5H3.95A3 3 0 001 6.912zm14 1.854H5v10a1 1 0 001 1h8a1 1 0 001-1v-10z" clipRule="evenodd" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-semibold text-slate-900">Create New Vendor</h2>
+                                        <p className="text-sm text-slate-500 mt-1">
+                                            Company name, contact person, and a valid GSTIN are saved to the vendor master
+                                        </p>
+                                    </div>
                                 </div>
 
-                                {/* FORM */}
                                 <div className="px-6 py-6 space-y-5">
-
-                                    {/* Vendor Name */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Vendor Name <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={newVendor.name}
-                                            onChange={(e) =>
-                                                setNewVendor({ ...newVendor, name: e.target.value })
-                                            }
-                                            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                                            placeholder="Enter vendor name"
-                                        />
-                                    </div>
-
-                                    {/* GST + Phone Row */}
-                                    <div className="grid grid-cols-2 gap-4">
-
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                GSTIN
+                                            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                                Vendor name <span className="text-red-500">*</span>
                                             </label>
                                             <input
                                                 type="text"
-                                                value={newVendor.gst_number}
+                                                value={newVendor.name}
                                                 onChange={(e) =>
-                                                    setNewVendor({ ...newVendor, gst_number: e.target.value })
+                                                    setNewVendor({ ...newVendor, name: e.target.value })
                                                 }
-                                                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                                                placeholder="22ABCDE1234F1Z5"
+                                                className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                                placeholder="Registered business name"
                                             />
                                         </div>
-
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Phone
-                                            </label>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1.5">Contact person</label>
+                                            <input
+                                                type="text"
+                                                value={newVendor.contact_person}
+                                                onChange={(e) =>
+                                                    setNewVendor({ ...newVendor, contact_person: e.target.value })
+                                                }
+                                                className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                placeholder="Name of primary contact"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            GST number <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={newVendor.gst_number}
+                                            onChange={(e) => handleVendorModalGst(e.target.value)}
+                                            className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono uppercase"
+                                            placeholder="22ABCDE1234F1Z5"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1.5">Phone</label>
                                             <input
                                                 type="tel"
                                                 value={newVendor.phone}
                                                 onChange={(e) =>
                                                     setNewVendor({ ...newVendor, phone: e.target.value })
                                                 }
-                                                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                                                 placeholder="9876543210"
                                             />
                                         </div>
-
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+                                            <input
+                                                type="email"
+                                                value={newVendor.email}
+                                                onChange={(e) =>
+                                                    setNewVendor({ ...newVendor, email: e.target.value })
+                                                }
+                                                className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                placeholder="vendor@example.com"
+                                            />
+                                        </div>
                                     </div>
 
-                                    {/* Email */}
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Email
-                                        </label>
-                                        <input
-                                            type="email"
-                                            value={newVendor.email}
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Address</label>
+                                        <textarea
+                                            value={newVendor.address}
                                             onChange={(e) =>
-                                                setNewVendor({ ...newVendor, email: e.target.value })
+                                                setNewVendor({ ...newVendor, address: e.target.value })
                                             }
-                                            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                                            placeholder="vendor@email.com"
+                                            rows={2}
+                                            className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                            placeholder="Office address"
                                         />
                                     </div>
 
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1.5">City</label>
+                                            <input
+                                                type="text"
+                                                value={newVendor.city}
+                                                onChange={(e) =>
+                                                    setNewVendor({ ...newVendor, city: e.target.value })
+                                                }
+                                                className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                placeholder="City"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1.5">State</label>
+                                            <input
+                                                type="text"
+                                                value={newVendor.state}
+                                                onChange={(e) =>
+                                                    setNewVendor({ ...newVendor, state: e.target.value })
+                                                }
+                                                className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                placeholder="State"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
-                                {/* FOOTER */}
-                                <div className="px-6 py-4 bg-gray-50 rounded-b-2xl flex justify-end gap-3">
-
+                                <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 rounded-b-2xl flex justify-end gap-3">
                                     <button
                                         type="button"
                                         disabled={vendorCreating}
                                         onClick={() => {
                                             setShowVendorModal(false);
-                                            setNewVendor({
-                                                name: "",
-                                                gst_number: "",
-                                                phone: "",
-                                                email: "",
-                                            });
+                                            resetNewVendor();
                                         }}
-                                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                                        className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition"
                                     >
                                         Cancel
                                     </button>
 
                                     <button
                                         type="button"
-                                        disabled={vendorCreating}
+                                        disabled={vendorCreating || !newVendor.name.trim()}
                                         onClick={createVendor}
-                                        className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                                        className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                     >
                                         {vendorCreating && (
                                             <svg
@@ -1388,7 +1477,6 @@ export default function CreateIndent() {
                                         )}
                                         Create Vendor
                                     </button>
-
                                 </div>
                             </div>
                         </div>
@@ -1398,4 +1486,3 @@ export default function CreateIndent() {
         </Layout>
     );
 }
-
