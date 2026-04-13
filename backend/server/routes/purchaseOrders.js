@@ -973,27 +973,22 @@ router.put(
       let received = parseFloat(received_qty);
       received = Math.round(received * 100) / 100;
 
+      if (!Number.isFinite(received) || received < 0) {
+        return res.status(400).json({ error: "Invalid received_qty" });
+      }
+
       if (received > ordered) {
         received = ordered;
       }
-
-      // --------------------------------------------------
-      // 🔹 ITEM STATUS CALCULATION
-      // --------------------------------------------------
-      let status = "pending";
-
-      if (received === 0) status = "pending";
-      else if (received < ordered) status = "partial";
-      else status = "completed";
 
       // --------------------------------------------------
       // 🔹 UPDATE ITEM
       // --------------------------------------------------
       await conn.query(
         `UPDATE po_items
-             SET received_qty=?, status=?
+             SET received_qty=?
              WHERE id=?`,
-        [received, status, itemId],
+        [received, itemId],
       );
 
       // --------------------------------------------------
@@ -1013,7 +1008,6 @@ router.put(
         return res.json({
           success: true,
           received_qty: received,
-          status,
           message: "PO is closed. Status not modified.",
         });
       }
@@ -1025,19 +1019,15 @@ router.put(
         `UPDATE purchase_orders
              SET status =
              CASE
-               WHEN NOT EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status!='completed'
-               )
-               THEN 'completed'
-
-               WHEN EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status='completed'
-               )
-               THEN 'partial'
-
-               ELSE 'pending'
+              WHEN NOT EXISTS (
+                  SELECT 1 FROM po_items
+                  WHERE po_id=? AND received_qty < ordered_qty
+              ) THEN 'completed'
+              WHEN EXISTS (
+                  SELECT 1 FROM po_items
+                  WHERE po_id=? AND received_qty > 0
+              ) THEN 'partial'
+              ELSE 'pending'
              END
              WHERE id=?`,
 
@@ -1047,7 +1037,8 @@ router.put(
       res.json({
         success: true,
         received_qty: received,
-        status,
+        status:
+          received === 0 ? "pending" : received < ordered ? "partial" : "completed",
       });
     } catch (err) {
       console.error(err);
@@ -1075,12 +1066,8 @@ router.put(
 
       conn = await db.getConnection();
 
-      await conn.query(
-        `UPDATE po_items
-             SET status='ordered'
-             WHERE id=?`,
-        [itemId],
-      );
+      // po_items table doesn't have a status column in this project schema.
+      // "Ordered" is represented at PO level and via quantities, so no-op here.
 
       res.json({ success: true });
     } catch (err) {
@@ -1128,8 +1115,7 @@ router.post(
       // --------------------------------------------------
       await conn.query(
         `UPDATE po_items
-             SET received_qty = ordered_qty,
-                 status = 'completed'
+             SET received_qty = ordered_qty
              WHERE id=?`,
         [itemId],
       );
@@ -1161,19 +1147,15 @@ router.post(
         `UPDATE purchase_orders
              SET status =
              CASE
-               WHEN NOT EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status!='completed'
-               )
-               THEN 'completed'
-
-               WHEN EXISTS (
-                   SELECT 1 FROM po_items
-                   WHERE po_id=? AND status='completed'
-               )
-               THEN 'partial'
-
-               ELSE 'pending'
+              WHEN NOT EXISTS (
+                  SELECT 1 FROM po_items
+                  WHERE po_id=? AND received_qty < ordered_qty
+              ) THEN 'completed'
+              WHEN EXISTS (
+                  SELECT 1 FROM po_items
+                  WHERE po_id=? AND received_qty > 0
+              ) THEN 'partial'
+              ELSE 'pending'
              END
              WHERE id=?`,
 
