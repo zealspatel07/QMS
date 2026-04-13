@@ -61,14 +61,40 @@ export default function EditPO() {
     const [vendorGST, setVendorGST] = useState("");
     const [vendorPhone, setVendorPhone] = useState("");
     const [vendorCity, setVendorCity] = useState("");
+    const [vendorState, setVendorState] = useState("");
     const [vendorEmail, setVendorEmail] = useState("");
     const [vendorAddress, setVendorAddress] = useState("");
+    const [vendorContactPerson, setVendorContactPerson] = useState("");
+
+    const [showVendorModal, setShowVendorModal] = useState(false);
+    const [vendorCreating, setVendorCreating] = useState(false);
+    const [newVendor, setNewVendor] = useState({
+        name: "",
+        contact_person: "",
+        phone: "",
+        email: "",
+        gst_number: "",
+        address: "",
+        city: "",
+        state: ""
+    });
 
     useEffect(() => {
         fetchPO();
         fetchVendors();
         fetchProducts();
     }, []);
+
+    useEffect(() => {
+        if (showVendorModal || showProductModal) {
+            document.body.style.overflow = "hidden";
+        } else {
+            document.body.style.overflow = "auto";
+        }
+        return () => {
+            document.body.style.overflow = "auto";
+        };
+    }, [showVendorModal, showProductModal]);
 
     // ---------------- FETCH ----------------
 
@@ -100,6 +126,16 @@ export default function EditPO() {
             : itemsWithKeys;
         setItems(normalizedItems);
 
+        // ✅ Initialize productSearchInput with existing product names so they display in the input field
+        const productSearchInputMap: Record<number, string> = {};
+        normalizedItems.forEach((item: any, index: number) => {
+            if (item.product_name) {
+                productSearchInputMap[index] = item.product_name;
+            }
+        });
+        setProductSearchInput(productSearchInputMap);
+        console.log("[EditPO] Initialized product search input:", productSearchInputMap);
+
         if (firstVid != null) {
             try {
                 const row = await api.getVendor(Number(firstVid));
@@ -120,8 +156,10 @@ export default function EditPO() {
                     setVendorGST(String(v.gst_number || v.gst || ""));
                     setVendorPhone(v.phone || "");
                     setVendorCity(v.city || "");
+                    setVendorState(v.state || "");
                     setVendorEmail(v.email || "");
                     setVendorAddress(v.address || "");
+                    setVendorContactPerson(row.contact_person || "");
                 }
             } catch (err) {
                 console.error("[EditPO] Failed to load vendor", err);
@@ -131,8 +169,10 @@ export default function EditPO() {
             setVendorGST("");
             setVendorPhone("");
             setVendorCity("");
+            setVendorState("");
             setVendorEmail("");
             setVendorAddress("");
+            setVendorContactPerson("");
         }
 
         setLoading(false);
@@ -149,8 +189,10 @@ export default function EditPO() {
             setVendorGST("");
             setVendorPhone("");
             setVendorCity("");
+            setVendorState("");
             setVendorEmail("");
             setVendorAddress("");
+            setVendorContactPerson("");
             setItems(prev => prev.map(i => ({ ...i, vendor_id: null })));
             return;
         }
@@ -174,8 +216,10 @@ export default function EditPO() {
             setVendorGST(String(vendor.gst_number || vendor.gst || ""));
             setVendorPhone(vendor.phone || "");
             setVendorCity(vendor.city || "");
+            setVendorState(vendor.state || "");
             setVendorEmail(vendor.email || "");
             setVendorAddress(vendor.address || "");
+            setVendorContactPerson(row.contact_person || "");
             setItems(prev => prev.map(i => ({ ...i, vendor_id: id })));
         } catch (err) {
             console.error(err);
@@ -185,8 +229,10 @@ export default function EditPO() {
                 setVendorGST(v.gst_number || v.gst || "");
                 setVendorPhone(v.phone || "");
                 setVendorCity(v.city || "");
+                setVendorState(v.state || "");
                 setVendorEmail(v.email || "");
                 setVendorAddress(v.address || "");
+                setVendorContactPerson(v.contact_person || "");
                 setItems(prev => prev.map(i => ({ ...i, vendor_id: id })));
             } else {
                 toast.error("Could not load vendor details");
@@ -272,6 +318,48 @@ export default function EditPO() {
         }
     }
 
+    function handleNewVendorGst(value: string) {
+        setNewVendor(prev => ({ ...prev, gst_number: value.toUpperCase() }));
+    }
+
+    async function createVendor() {
+        if (!newVendor.name.trim()) {
+            toast.error("Vendor name is required");
+            return;
+        }
+
+        setVendorCreating(true);
+        try {
+            const created = await api.createVendor(newVendor);
+
+            if (!created || !created.name) {
+                throw new Error("Invalid vendor response");
+            }
+
+            setVendors(prev => [...prev, created]);
+            await applyPoVendor(created.id);
+
+            setNewVendor({
+                name: "",
+                contact_person: "",
+                phone: "",
+                email: "",
+                gst_number: "",
+                address: "",
+                city: "",
+                state: ""
+            });
+            setShowVendorModal(false);
+
+            toast.success("Vendor created successfully!");
+        } catch (err) {
+            console.error("Vendor creation error:", err);
+            toast.error("Failed to create vendor");
+        } finally {
+            setVendorCreating(false);
+        }
+    }
+
     // ---------------- HANDLERS ----------------
 
     const updateQty = (index: number, value: number) => {
@@ -288,7 +376,9 @@ export default function EditPO() {
             vendorPhone !== (original.phone || "") ||
             vendorEmail !== (original.email || "") ||
             vendorCity !== (original.city || "") ||
+            vendorState !== (original.state || "") ||
             vendorAddress !== (original.address || "") ||
+            vendorContactPerson !== (original.contact_person || "") ||
             vendorGST !== (original.gst || original.gst_number || "")
         );
     }
@@ -326,15 +416,23 @@ export default function EditPO() {
                 if (vendorPhone !== (originalVendor?.phone || "")) vendorChanges.phone = vendorPhone;
                 if (vendorEmail !== (originalVendor?.email || "")) vendorChanges.email = vendorEmail;
                 if (vendorCity !== (originalVendor?.city || "")) vendorChanges.city = vendorCity;
+                if (vendorState !== (originalVendor?.state || "")) vendorChanges.state = vendorState;
                 if (vendorAddress !== (originalVendor?.address || "")) vendorChanges.address = vendorAddress;
+                if (vendorContactPerson !== (originalVendor?.contact_person || "")) {
+                    vendorChanges.contact_person = vendorContactPerson;
+                }
                 if (vendorGST !== (originalVendor?.gst || originalVendor?.gst_number || "")) {
                     vendorChanges.gst_number = vendorGST;
                 }
                 if (Object.keys(vendorChanges).length > 0) {
                     try {
+                        console.log("[EditPO] Updating vendor with changes:", vendorChanges);
                         await api.updateVendor(selectedVendor.id, vendorChanges);
+                        console.log("[EditPO] Vendor updated successfully");
+                        toast.success("✓ Vendor details updated");
                     } catch (err) {
                         console.error("Failed to update vendor master", err);
+                        toast.error("Failed to update vendor details");
                     }
                 }
             }
@@ -538,7 +636,8 @@ export default function EditPO() {
                                 return;
                             }
                             if (selected.__isNew__) {
-                                toast.error("Create new vendors from the Create PO screen");
+                                setNewVendor(prev => ({ ...prev, name: selected.label }));
+                                setShowVendorModal(true);
                                 return;
                             }
                             void applyPoVendor(selected.value);
@@ -547,7 +646,11 @@ export default function EditPO() {
                         placeholder="Search or select vendor"
                         isSearchable
                         isClearable
-                        isValidNewOption={() => false}
+                        formatCreateLabel={(inputValue) => `+ Create "${inputValue}"`}
+                        isValidNewOption={(inputValue, _, options) =>
+                            inputValue.trim().length > 0 &&
+                            !options.some(opt => opt.label.toLowerCase() === inputValue.toLowerCase())
+                        }
                         menuPortalTarget={document.body}
                         menuPosition="fixed"
                         styles={{
@@ -583,7 +686,17 @@ export default function EditPO() {
 
                         {selectedVendor ? (
                             <div className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Contact person</label>
+                                    <input
+                                        type="text"
+                                        value={vendorContactPerson}
+                                        onChange={(e) => setVendorContactPerson(e.target.value)}
+                                        placeholder="Primary contact at supplier"
+                                        className="w-full max-w-xl px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1.5">Supplier GST</label>
                                         <input
@@ -616,6 +729,18 @@ export default function EditPO() {
                                             onChange={(e) => {
                                                 setVendorCity(e.target.value);
                                                 setSelectedVendor({ ...selectedVendor, city: e.target.value });
+                                            }}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">State</label>
+                                        <input
+                                            type="text"
+                                            value={vendorState}
+                                            onChange={(e) => {
+                                                setVendorState(e.target.value);
+                                                setSelectedVendor({ ...selectedVendor, state: e.target.value });
                                             }}
                                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                                         />
@@ -718,9 +843,9 @@ export default function EditPO() {
                                                 data-product-field 
                                                 style={{ 
                                                     position: 'relative', 
-                                                    zIndex: showProductModal ? -1 : 99999,
-                                                    pointerEvents: showProductModal ? 'none' : 'auto',
-                                                    display: showProductModal ? 'none' : 'flex',
+                                                    zIndex: showProductModal || showVendorModal ? -1 : 99999,
+                                                    pointerEvents: showProductModal || showVendorModal ? 'none' : 'auto',
+                                                    display: showProductModal || showVendorModal ? 'none' : 'flex',
                                                     transition: 'opacity 0.2s, pointer-events 0.2s'
                                                 }}
                                             >
@@ -754,7 +879,7 @@ export default function EditPO() {
                                                     )}
 
                                                     {/* Product Dropdown */}
-                                                    {showProductDropdown[index] && (
+                                                    {showProductDropdown[index] && !showVendorModal && (
                                                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-2xl" style={{ maxHeight: '400px', overflowY: 'auto', zIndex: 99999, position: 'relative' }}>
                                                             {(() => {
                                                                 const searchTerm = (productSearchInput[index] || i.product_name || "").toLowerCase();
@@ -912,8 +1037,149 @@ export default function EditPO() {
                 </div>
 
                 {/* ====== CREATE PRODUCT MODAL ====== */}
+                    {showVendorModal && (
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4 backdrop-blur-sm">
+                            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-8 max-h-[90vh] overflow-y-auto">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="p-3 bg-blue-100 rounded-lg">
+                                        <svg className="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+                                            <path d="M8 16.5a1 1 0 11-2 0 1 1 0 012 0z" />
+                                            <path fillRule="evenodd" d="M1 6.912V19a3 3 0 003 3h12a3 3 0 003-3V6.912A3 3 0 0016.05 3.5H3.95A3 3 0 001 6.912zm14 1.854H5v10a1 1 0 001 1h8a1 1 0 001-1v-10z" clipRule="evenodd" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-slate-900">Create New Vendor</h2>
+                                        <p className="text-sm text-slate-600 mt-1">Add vendor details for procurement</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 mb-2">Vendor Name *</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Enter vendor name"
+                                                value={newVendor.name}
+                                                onChange={(e) => setNewVendor({ ...newVendor, name: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 mb-2">Contact person</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Name of primary contact"
+                                                value={newVendor.contact_person}
+                                                onChange={(e) => setNewVendor({ ...newVendor, contact_person: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                            />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-semibold text-slate-700 mb-2">GST number *</label>
+                                            <input
+                                                type="text"
+                                                placeholder="22ABCDE1234F1Z5"
+                                                value={newVendor.gst_number}
+                                                onChange={(e) => handleNewVendorGst(e.target.value)}
+                                                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition font-mono uppercase"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 mb-2">Phone</label>
+                                            <input
+                                                type="tel"
+                                                placeholder="9876543210"
+                                                value={newVendor.phone}
+                                                onChange={(e) => setNewVendor({ ...newVendor, phone: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 mb-2">Email</label>
+                                            <input
+                                                type="email"
+                                                placeholder="vendor@example.com"
+                                                value={newVendor.email}
+                                                onChange={(e) => setNewVendor({ ...newVendor, email: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-2">Address</label>
+                                        <textarea
+                                            placeholder="Office address"
+                                            value={newVendor.address}
+                                            onChange={(e) => setNewVendor({ ...newVendor, address: e.target.value })}
+                                            rows={2}
+                                            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none transition"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 mb-2">City</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g., Mumbai"
+                                                value={newVendor.city}
+                                                onChange={(e) => setNewVendor({ ...newVendor, city: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 mb-2">State</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g., Maharashtra"
+                                                value={newVendor.state}
+                                                onChange={(e) => setNewVendor({ ...newVendor, state: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 mt-8 pt-6 border-t border-slate-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowVendorModal(false);
+                                            setNewVendor({
+                                                name: "",
+                                                contact_person: "",
+                                                phone: "",
+                                                email: "",
+                                                gst_number: "",
+                                                address: "",
+                                                city: "",
+                                                state: ""
+                                            });
+                                        }}
+                                        className="flex-1 px-4 py-2.5 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors font-semibold"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void createVendor()}
+                                        disabled={vendorCreating || !newVendor.name.trim()}
+                                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {vendorCreating ? "Creating..." : "Create Vendor"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {showProductModal && (
-                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4 backdrop-blur-sm">
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4 backdrop-blur-sm">
                             <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-8 max-h-[90vh] overflow-y-auto">
                                 <div className="flex items-center gap-3 mb-6">
                                     <div className="p-3 bg-emerald-100 rounded-lg">

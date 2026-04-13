@@ -539,72 +539,150 @@ PUT /api/vendors/:id
 ---------------------------------------
 */
 
-router.put("/vendors/:id", authMiddleware, requireAdminOrPurchase, async (req, res) => {
-
+router.put(
+  "/vendors/:id",
+  authMiddleware,
+  requireAdminOrPurchase,
+  async (req, res) => {
     let conn;
 
     try {
+      const { id } = req.params;
+      const data = req.body;
 
-        const { id } = req.params;
-        const data = req.body;
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
+      // ✅ ALLOWED DB FIELDS ONLY
+      const allowedFields = [
+        "vendor_code",
+        "name",
+        "contact_person",
+        "phone",
+        "email",
+        "address",
+        "city",
+        "state",
+        "country",
+        "gst_number",
+        "is_active",
+      ];
 
-        // ✅ ONLY ALLOW REAL DB COLUMNS
-        const allowedFields = [
-            "vendor_code",
-            "name",
-            "contact_person",
-            "phone",
-            "email",
-            "address",
-            "city",
-            "state",
-            "country",
-            "gst_number",
-            "is_active"
-        ];
+      const updates = [];
+      const values = [];
 
-        const updates = [];
-        const values = [];
+      // --------------------------------------------------
+      // 🔥 PROCESS & SANITIZE INPUT
+      // --------------------------------------------------
+      for (const key of allowedFields) {
+        if (data[key] !== undefined) {
+          let value = data[key];
 
-        for (const key of allowedFields) {
-            if (data[key] !== undefined) {
-                updates.push(`${key} = ?`);
-                values.push(data[key]);
+          // ✅ Normalize strings
+          if (typeof value === "string") {
+            value = value.trim();
+            if (value === "") value = null;
+          }
+
+          // --------------------------------------------------
+          // 🔥 GST HANDLING (OPTIONAL + LENGTH ONLY)
+          // --------------------------------------------------
+          if (key === "gst_number") {
+            if (value) {
+              value = value.toUpperCase();
+
+              if (value.length !== 15) {
+                return res.status(400).json({
+                  error: "GST must be exactly 15 characters",
+                });
+              }
+
+              // ✅ DUPLICATE CHECK (exclude current vendor)
+              const [existing] = await conn.query(
+                `SELECT id FROM vendors WHERE gst_number = ? AND id != ?`,
+                [value, id]
+              );
+
+              if (existing.length > 0) {
+                return res.status(400).json({
+                  error: "GST already exists for another vendor",
+                });
+              }
+            } else {
+              value = null;
             }
+          }
+
+          updates.push(`${key} = ?`);
+          values.push(value);
         }
+      }
 
-        if (updates.length === 0) {
-            return res.status(400).json({ error: "No valid fields to update" });
-        }
-
-        values.push(id);
-
-        const query = `UPDATE vendors SET ${updates.join(", ")} WHERE id = ?`;
-
-        console.log("✅ SAFE UPDATE:", { id, updates });
-
-        await conn.query(query, values);
-
-        res.json({
-            success: true,
-            message: "Vendor updated successfully",
-            vendor_id: id
+      // --------------------------------------------------
+      // ❌ NO VALID FIELDS
+      // --------------------------------------------------
+      if (updates.length === 0) {
+        return res.status(400).json({
+          error: "No valid fields to update",
         });
+      }
+
+      // --------------------------------------------------
+      // 🔥 EXECUTE UPDATE
+      // --------------------------------------------------
+      values.push(id);
+
+      const query = `
+        UPDATE vendors 
+        SET ${updates.join(", ")} 
+        WHERE id = ?
+      `;
+
+      console.log("✅ UPDATE QUERY:", query);
+      console.log("✅ VALUES:", values);
+
+      const [result] = await conn.query(query, values);
+
+      // --------------------------------------------------
+      // ❌ NOT FOUND CASE
+      // --------------------------------------------------
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          error: "Vendor not found",
+        });
+      }
+
+      // --------------------------------------------------
+      // ✅ SUCCESS
+      // --------------------------------------------------
+      res.json({
+        success: true,
+        message: "Vendor updated successfully",
+        vendor_id: id,
+      });
 
     } catch (err) {
+      console.error("🔥 Update vendor error:", err);
 
-        console.error("Update vendor error:", err);
-        res.status(500).json({ error: "Failed to update vendor" });
+      // --------------------------------------------------
+      // 🔥 HANDLE DUPLICATE ERROR CLEANLY
+      // --------------------------------------------------
+      if (err.code === "ER_DUP_ENTRY") {
+        return res.status(400).json({
+          error: "Duplicate entry (GST or unique field already exists)",
+        });
+      }
+
+      res.status(500).json({
+        error: "Failed to update vendor",
+        details: err.message, // 🔥 important for debugging
+      });
 
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
+  }
+);
 
-});
 
 /*
 ---------------------------------------

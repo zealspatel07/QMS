@@ -4207,7 +4207,7 @@ ORDER BY qv.created_at DESC;
     console.error('❌ fetch version history error:', err); // 🔥 important
     res.status(500).json({ error: 'db error', details: err.message });
   } finally {
-    if (conn) try { await conn.release(); } catch {}
+    if (conn) try { await conn.release(); } catch { }
   }
 });
 

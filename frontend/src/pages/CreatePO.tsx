@@ -48,6 +48,7 @@ export default function CreatePO() {
     const [vendorCreating, setVendorCreating] = useState(false);
     const [newVendor, setNewVendor] = useState({
         name: "",
+        contact_person: "",
         phone: "",
         email: "",
         gst_number: "",
@@ -618,6 +619,7 @@ export default function CreatePO() {
             // Reset modal
             setNewVendor({
                 name: "",
+                contact_person: "",
                 phone: "",
                 email: "",
                 gst_number: "",
@@ -1399,7 +1401,7 @@ export default function CreatePO() {
                                 </div>
 
                                 <div className="space-y-6">
-                                    {/* Row 1: Name & GST */}
+                                    {/* Name, contact person, GST */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-semibold text-slate-700 mb-2">Vendor Name *</label>
@@ -1412,7 +1414,17 @@ export default function CreatePO() {
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-semibold text-slate-700 mb-2">GST Number</label>
+                                            <label className="block text-sm font-semibold text-slate-700 mb-2">Contact person</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Name of primary contact"
+                                                value={newVendor.contact_person}
+                                                onChange={(e) => setNewVendor({ ...newVendor, contact_person: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                            />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-semibold text-slate-700 mb-2">GST number *</label>
                                             <input
                                                 type="text"
                                                 placeholder="22ABCDE1234F1Z5"
@@ -1488,7 +1500,16 @@ export default function CreatePO() {
                                     <button
                                         onClick={() => {
                                             setShowVendorModal(false);
-                                            setNewVendor({ name: "", phone: "", email: "", gst_number: "", address: "", city: "", state: "" });
+                                            setNewVendor({
+                                                name: "",
+                                                contact_person: "",
+                                                phone: "",
+                                                email: "",
+                                                gst_number: "",
+                                                address: "",
+                                                city: "",
+                                                state: ""
+                                            });
                                         }}
                                         className="flex-1 px-4 py-2.5 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors font-semibold"
                                     >

@@ -1,61 +1,73 @@
 //backend/server/routes/indent.js
 
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const db = require('../db');
+const db = require("../db");
 
-const authMiddleware = require('../middleware/auth');
+const authMiddleware = require("../middleware/auth");
 const upload = require("../middleware/uploadIndentDocument");
 const {
-    requireIndentAccess,
-    requireIndentCreation,
-} = require('../middleware/authorization');
+  requireIndentAccess,
+  requireIndentCreation,
+} = require("../middleware/authorization");
 
 /*
 -------------------------------------------------------
 CREATE INDENT
 -------------------------------------------------------
 */
-router.post('/indents', authMiddleware, requireIndentCreation, upload.array("documents", 10), async (req, res) => {
-
+router.post(
+  "/indents",
+  authMiddleware,
+  requireIndentCreation,
+  upload.array("documents", 10),
+  async (req, res) => {
     let conn;
 
     try {
+      const {
+        customer_id,
+        customer_location_id,
+        customer_contact_id,
+        customer_name,
+        preferred_vendor,
+        indent_date,
+        notes,
+        status,
+        items,
+        created_by,
+        created_by_name,
+      } = req.body;
 
-        const {
-            customer_id,
-            customer_location_id,
-            customer_contact_id,
-            customer_name,
-            preferred_vendor,
-            indent_date,
-            notes,
-            status,
-            items,
-            created_by,
-            created_by_name
-        } = req.body;
+      // support multiple uploaded documents (upload.array -> req.files)
+      const documents = req.files || (req.file ? [req.file] : []);
 
-        // support multiple uploaded documents (upload.array -> req.files)
-        const documents = req.files || (req.file ? [req.file] : []);
+      const year = new Date().getFullYear();
 
-        const year = new Date().getFullYear();
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
+      await conn.beginTransaction();
 
-        await conn.beginTransaction();
+      // ✅ SAFE SEQUENCE GENERATION (NO DUPLICATES)
+      const [maxRows] = await conn.query(
+        `
+    SELECT MAX(CAST(SUBSTRING_INDEX(indent_number, '/', -1) AS UNSIGNED)) as max_seq
+    FROM indents
+    WHERE indent_number LIKE ?
+`,
+        [`IND/${year}/%`],
+      );
 
-        // Generate indent number
-        const [countRows] = await conn.query(
-            "SELECT COUNT(*) as count FROM indents WHERE YEAR(created_at)=?",
-            [year]
-        );
+      const maxSequence = maxRows[0]?.max_seq || 0;
+      const nextNumber = maxSequence + 1;
 
-        const nextNumber = countRows[0].count + 1;
-        const indentNumber = `IND/${year}/${String(nextNumber).padStart(3, '0')}`;
+      const indentNumber = `IND/${year}/${String(nextNumber).padStart(3, "0")}`;
 
-        // Insert indent
-        const [indentResult] = await conn.query(`
+      console.log("📌 GENERATED INDENT NUMBER:", indentNumber);
+
+      // Insert indent
+      const [indentResult] = await conn.query(
+        `
             INSERT INTO indents
             (
                 indent_number,
@@ -72,93 +84,91 @@ router.post('/indents', authMiddleware, requireIndentCreation, upload.array("doc
                 created_by_name
             )
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-        `, [
-            indentNumber,
-            customer_id || null,
-            customer_location_id || null,
-            customer_contact_id || null,
-            customer_name,
-            preferred_vendor,
-            indent_date,
-            req.body.po_number || null,
-            notes,
-            status || "submitted",
-            created_by,
-            created_by_name
+        `,
+        [
+          indentNumber,
+          customer_id || null,
+          customer_location_id || null,
+          customer_contact_id || null,
+          customer_name,
+          preferred_vendor,
+          indent_date,
+          req.body.po_number || null,
+          notes,
+          status || "submitted",
+          created_by,
+          created_by_name,
+        ],
+      );
+
+      const indentId = indentResult.insertId;
+
+      // Insert items
+      const parsedItems = typeof items === "string" ? JSON.parse(items) : items;
+
+      if (parsedItems && parsedItems.length) {
+        // ✅ Validate all items have required fields
+        for (const item of parsedItems) {
+          if (!item.product_name || !item.product_name.trim()) {
+            throw new Error(
+              `Product name is required for all items. Item: ${JSON.stringify(item)}`,
+            );
+          }
+          if (!item.quantity || Number(item.quantity) <= 0) {
+            throw new Error(
+              `Valid quantity required for product: ${item.product_name}`,
+            );
+          }
+        }
+
+        const values = parsedItems.map((i) => [
+          indentId,
+          i.product_id || null,
+          i.product_name,
+          i.product_description || null,
+          Number(i.quantity || 0),
+          i.uom || "NOS", // ✅ ADD THIS
         ]);
-
-        const indentId = indentResult.insertId;
-
-        // Insert items
-        const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
-
-        if (parsedItems && parsedItems.length) {
-
-            // ✅ Validate all items have required fields
-            for (const item of parsedItems) {
-                if (!item.product_name || !item.product_name.trim()) {
-                    throw new Error(`Product name is required for all items. Item: ${JSON.stringify(item)}`);
-                }
-                if (!item.quantity || Number(item.quantity) <= 0) {
-                    throw new Error(`Valid quantity required for product: ${item.product_name}`);
-                }
-            }
-
-            const values = parsedItems.map(i => [
-                indentId,
-                i.product_id || null,
-                i.product_name,
-                i.product_description || null,
-                Number(i.quantity || 0),
-                i.uom || 'NOS'   // ✅ ADD THIS
-            ]);
-            await conn.query(`
+        await conn.query(
+          `
         INSERT INTO indent_items
         (indent_id, product_id, product_name, product_description, quantity, uom)
         VALUES ?
-    `, [values]);
-        }
+    `,
+          [values],
+        );
+      }
 
-        // Save any uploaded documents
-        if (documents && documents.length) {
-            for (const doc of documents) {
-                await conn.query(
-                    `INSERT INTO indent_documents
+      // Save any uploaded documents
+      if (documents && documents.length) {
+        for (const doc of documents) {
+          await conn.query(
+            `INSERT INTO indent_documents
                     (indent_id,file_name,file_path,uploaded_by)
                     VALUES (?,?,?,?)`,
-                    [
-                        indentId,
-                        doc.originalname,
-                        doc.filename,
-                        created_by
-                    ]
-                );
-            }
+            [indentId, doc.originalname, doc.filename, created_by],
+          );
         }
+      }
 
-        await conn.commit();
+      await conn.commit();
 
-        res.json({
-            success: true,
-            indent_id: indentId,
-            indent_number: indentNumber
-        });
-
+      res.json({
+        success: true,
+        indent_id: indentId,
+        indent_number: indentNumber,
+      });
     } catch (err) {
+      console.error(err);
 
-        console.error(err);
+      if (conn) await conn.rollback();
 
-        if (conn) await conn.rollback();
-
-        res.status(500).json({ error: "Failed to create indent" });
-
+      res.status(500).json({ error: "Failed to create indent" });
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
-
-});
+  },
+);
 
 /*
 -------------------------------------------------------
@@ -166,34 +176,38 @@ UPDATE INDENT
 PUT /api/indents/:id
 -------------------------------------------------------
 */
-router.put('/indents/:id', authMiddleware, requireIndentCreation, upload.array("documents", 10), async (req, res) => {
-
+router.put(
+  "/indents/:id",
+  authMiddleware,
+  requireIndentCreation,
+  upload.array("documents", 10),
+  async (req, res) => {
     let conn;
 
     try {
+      const indentId = req.params.id;
+      const {
+        customer_id,
+        customer_location_id,
+        customer_contact_id,
+        customer_name,
+        preferred_vendor,
+        indent_date,
+        notes,
+        status,
+        items,
+      } = req.body;
 
-        const indentId = req.params.id;
-        const {
-            customer_id,
-            customer_location_id,
-            customer_contact_id,
-            customer_name,
-            preferred_vendor,
-            indent_date,
-            notes,
-            status,
-            items
-        } = req.body;
+      // support multiple uploaded documents
+      const documents = req.files || (req.file ? [req.file] : []);
 
-        // support multiple uploaded documents
-        const documents = req.files || (req.file ? [req.file] : []);
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
+      await conn.beginTransaction();
 
-        await conn.beginTransaction();
-
-        // Update indent header
-        await conn.query(`
+      // Update indent header
+      await conn.query(
+        `
             UPDATE indents
             SET
                 customer_id = ?,
@@ -206,93 +220,93 @@ router.put('/indents/:id', authMiddleware, requireIndentCreation, upload.array("
                 notes = ?,
                 status = ?
             WHERE id = ?
-        `, [
-            customer_id || null,
-            customer_location_id || null,
-            customer_contact_id || null,
-            customer_name,
-            preferred_vendor,
-            indent_date,
-            req.body.po_number || null,
-            notes,
-            status || "submitted",
-            indentId
+        `,
+        [
+          customer_id || null,
+          customer_location_id || null,
+          customer_contact_id || null,
+          customer_name,
+          preferred_vendor,
+          indent_date,
+          req.body.po_number || null,
+          notes,
+          status || "submitted",
+          indentId,
+        ],
+      );
+
+      // Delete existing items for this indent
+      await conn.query("DELETE FROM indent_items WHERE indent_id = ?", [
+        indentId,
+      ]);
+
+      // Insert new items
+      const parsedItems = typeof items === "string" ? JSON.parse(items) : items;
+
+      if (parsedItems && parsedItems.length) {
+        // Validate all items have required fields
+        for (const item of parsedItems) {
+          if (!item.product_name || !item.product_name.trim()) {
+            throw new Error(
+              `Product name is required for all items. Item: ${JSON.stringify(item)}`,
+            );
+          }
+          if (!item.quantity || Number(item.quantity) <= 0) {
+            throw new Error(
+              `Valid quantity required for product: ${item.product_name}`,
+            );
+          }
+        }
+
+        const values = parsedItems.map((i) => [
+          indentId,
+          i.product_id || null,
+          i.product_name,
+          i.product_description || null,
+          Number(i.quantity || 0),
+          i.uom || "NOS", // ✅ ADD
         ]);
 
-        // Delete existing items for this indent
-        await conn.query('DELETE FROM indent_items WHERE indent_id = ?', [indentId]);
-
-        // Insert new items
-        const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
-
-        if (parsedItems && parsedItems.length) {
-
-            // Validate all items have required fields
-            for (const item of parsedItems) {
-                if (!item.product_name || !item.product_name.trim()) {
-                    throw new Error(`Product name is required for all items. Item: ${JSON.stringify(item)}`);
-                }
-                if (!item.quantity || Number(item.quantity) <= 0) {
-                    throw new Error(`Valid quantity required for product: ${item.product_name}`);
-                }
-            }
-
-            const values = parsedItems.map(i => [
-                indentId,
-                i.product_id || null,
-                i.product_name,
-                i.product_description || null,
-                Number(i.quantity || 0),
-                i.uom || 'NOS'   // ✅ ADD
-            ]);
-
-            await conn.query(`
+        await conn.query(
+          `
         INSERT INTO indent_items
         (indent_id, product_id, product_name, product_description, quantity, uom)
         VALUES ?
-    `, [values]);
-        }
+    `,
+          [values],
+        );
+      }
 
-        // Save any uploaded documents
-        if (documents && documents.length) {
-            for (const doc of documents) {
-                await conn.query(
-                    `INSERT INTO indent_documents
+      // Save any uploaded documents
+      if (documents && documents.length) {
+        for (const doc of documents) {
+          await conn.query(
+            `INSERT INTO indent_documents
                     (indent_id,file_name,file_path,uploaded_by)
                     VALUES (?,?,?,?)`,
-                    [
-                        indentId,
-                        doc.originalname,
-                        doc.filename,
-                        req.user?.id || null
-                    ]
-                );
-            }
+            [indentId, doc.originalname, doc.filename, req.user?.id || null],
+          );
         }
+      }
 
-        await conn.commit();
+      await conn.commit();
 
-        res.json({
-            success: true,
-            indent_id: indentId,
-            message: "Indent updated successfully"
-        });
-
+      res.json({
+        success: true,
+        indent_id: indentId,
+        message: "Indent updated successfully",
+      });
     } catch (err) {
+      console.error(err);
 
-        console.error(err);
+      if (conn) await conn.rollback();
 
-        if (conn) await conn.rollback();
-
-        res.status(500).json({ error: "Failed to update indent" });
-
+      res.status(500).json({ error: "Failed to update indent" });
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
-
-});
+  },
+);
 
 /*
 -------------------------------------------------------
@@ -300,83 +314,103 @@ DOWNLOAD INDENT DOCUMENT
 GET /api/indents/document/download/:documentId
 -------------------------------------------------------
 */
-router.get('/indents/document/download/:documentId', authMiddleware, async (req, res) => {
+router.get(
+  "/indents/document/download/:documentId",
+  authMiddleware,
+  async (req, res) => {
     const { documentId } = req.params;
     let conn;
 
     try {
-        conn = await db.getConnection();
+      conn = await db.getConnection();
 
-        // Get document info
-        const [docs] = await conn.query(
-            `SELECT * FROM indent_documents WHERE id = ?`,
-            [documentId]
+      // Get document info
+      const [docs] = await conn.query(
+        `SELECT * FROM indent_documents WHERE id = ?`,
+        [documentId],
+      );
+
+      if (!docs.length) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const doc = docs[0];
+      const path = require("path");
+      const fs = require("fs");
+
+      // Debug: log download attempts
+      try {
+        console.log(
+          "Download API HIT documentId=",
+          documentId,
+          "requestedBy=",
+          req.ip || req.headers["x-forwarded-for"] || "unknown",
         );
+      } catch (e) {}
 
-        if (!docs.length) {
-            return res.status(404).json({ error: "Document not found" });
+      const filePath = path.join(
+        __dirname,
+        "../../uploads/indent-documents",
+        doc.file_path,
+      );
+
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "File not found on server" });
+      }
+
+      // Detect MIME type from file extension
+      const ext = String(path.extname(doc.file_name || "")).toLowerCase();
+      let contentType = "application/octet-stream";
+      if (ext === ".pdf") contentType = "application/pdf";
+      else if (ext === ".png") contentType = "image/png";
+      else if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
+
+      res.setHeader("Content-Type", contentType);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${doc.file_name}"`,
+      );
+
+      // Stream the file to avoid encoding issues
+      const stream = fs.createReadStream(filePath);
+      stream.on("error", (err) => {
+        console.error("File stream error:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to read file" });
+        } else {
+          res.destroy();
         }
+      });
 
-        const doc = docs[0];
-        const path = require('path');
-        const fs = require('fs');
-
-        // Debug: log download attempts
-        try { console.log('Download API HIT documentId=', documentId, 'requestedBy=', req.ip || req.headers['x-forwarded-for'] || 'unknown'); } catch (e) { }
-
-        const filePath = path.join(__dirname, '../../uploads/indent-documents', doc.file_path);
-
-        // Check if file exists
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ error: "File not found on server" });
-        }
-
-        // Detect MIME type from file extension
-        const ext = String(path.extname(doc.file_name || '')).toLowerCase();
-        let contentType = 'application/octet-stream';
-        if (ext === '.pdf') contentType = 'application/pdf';
-        else if (ext === '.png') contentType = 'image/png';
-        else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
-
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Disposition', `attachment; filename="${doc.file_name}"`);
-
-        // Stream the file to avoid encoding issues
-        const stream = fs.createReadStream(filePath);
-        stream.on('error', (err) => {
-            console.error('File stream error:', err);
-            if (!res.headersSent) {
-                res.status(500).json({ error: 'Failed to read file' });
-            } else {
-                res.destroy();
-            }
-        });
-
-        stream.pipe(res);
-
+      stream.pipe(res);
     } catch (err) {
-        console.error('Download error:', err);
-        res.status(500).json({ error: "Failed to download document", details: err.message });
+      console.error("Download error:", err);
+      res
+        .status(500)
+        .json({ error: "Failed to download document", details: err.message });
     } finally {
-        if (conn) conn.release();
+      if (conn) conn.release();
     }
-});
-
+  },
+);
 
 /*
 -------------------------------------------------------
 GET INDENT LIST
 -------------------------------------------------------
 */
-router.get('/indents', authMiddleware, requireIndentAccess, async (req, res) => {
-
+router.get(
+  "/indents",
+  authMiddleware,
+  requireIndentAccess,
+  async (req, res) => {
     let conn;
 
     try {
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
-
-        const [rows] = await conn.query(`
+      const [rows] = await conn.query(`
 
         SELECT
         i.id,
@@ -409,52 +443,48 @@ router.get('/indents', authMiddleware, requireIndentAccess, async (req, res) => 
         ORDER BY i.created_at DESC
         `);
 
-        res.json(rows);
-
+      res.json(rows);
     } catch (err) {
-
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch indents" });
-
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch indents" });
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
-
-});
-
-
+  },
+);
 
 /*
 -------------------------------------------------------
 GET SINGLE INDENT (MAIN PAGE DATA)
 -------------------------------------------------------
 */
-router.get('/indents/:id', authMiddleware, requireIndentAccess, async (req, res) => {
-
+router.get(
+  "/indents/:id",
+  authMiddleware,
+  requireIndentAccess,
+  async (req, res) => {
     let conn;
 
     try {
+      const indentId = req.params.id;
 
-        const indentId = req.params.id;
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
+      // Fetch indent
+      const [indentRows] = await conn.query(
+        `SELECT * FROM indents WHERE id=?`,
+        [indentId],
+      );
 
-        // Fetch indent
-        const [indentRows] = await conn.query(
-            `SELECT * FROM indents WHERE id=?`,
-            [indentId]
-        );
+      if (!indentRows.length) {
+        return res.status(404).json({ error: "Indent not found" });
+      }
 
-        if (!indentRows.length) {
-            return res.status(404).json({ error: "Indent not found" });
-        }
+      const indent = indentRows[0];
 
-        const indent = indentRows[0];
-
-        // Fetch items with PO tracking - JOIN with products to get latest details
-        const [items] = await conn.query(`
+      // Fetch items with PO tracking - JOIN with products to get latest details
+      const [items] = await conn.query(
+        `
 
       SELECT
 ii.id,
@@ -514,11 +544,13 @@ GROUP BY
   ii.quantity,
   COALESCE(p.uom, ii.uom)
 ORDER BY ii.id
-        `, [indentId]);
+        `,
+        [indentId],
+      );
 
-
-        // Fetch PO history
-        const [activities] = await conn.query(`
+      // Fetch PO history
+      const [activities] = await conn.query(
+        `
             SELECT
             po.id,
             po.po_number,
@@ -528,53 +560,51 @@ ORDER BY ii.id
             FROM purchase_orders po
             WHERE po.indent_id=?
             ORDER BY po.created_at ASC
-        `, [indentId]);
+        `,
+        [indentId],
+      );
 
-        const timeline = [
-            {
-                activity_type: "Indent Created",
-                created_at: indent.created_at
-            },
-            ...activities
-        ];
+      const timeline = [
+        {
+          activity_type: "Indent Created",
+          created_at: indent.created_at,
+        },
+        ...activities,
+      ];
 
-        res.json({
-            ...indent,
-            items,
-            activities: timeline
-        });
-
+      res.json({
+        ...indent,
+        items,
+        activities: timeline,
+      });
     } catch (err) {
-
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch indent" });
-
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch indent" });
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
-
-});
-
-
+  },
+);
 
 /*
 -------------------------------------------------------
 GET INDENT SUMMARY
 -------------------------------------------------------
 */
-router.get('/indents/:id/summary', authMiddleware, requireIndentAccess, async (req, res) => {
-
+router.get(
+  "/indents/:id/summary",
+  authMiddleware,
+  requireIndentAccess,
+  async (req, res) => {
     let conn;
 
     try {
+      const indentId = req.params.id;
 
-        const indentId = req.params.id;
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
-
-        const [rows] = await conn.query(`
+      const [rows] = await conn.query(
+        `
 
         SELECT
         COUNT(ii.id) as products,
@@ -589,56 +619,53 @@ router.get('/indents/:id/summary', authMiddleware, requireIndentAccess, async (r
 
         WHERE ii.indent_id=?
 
-        `, [indentId]);
+        `,
+        [indentId],
+      );
 
-        const data = rows[0];
+      const data = rows[0];
 
-        const required = Number(data.required_qty || 0);
-        const ordered = Number(data.ordered_qty || 0);
+      const required = Number(data.required_qty || 0);
+      const ordered = Number(data.ordered_qty || 0);
 
-        const coverage = required > 0
-            ? Math.round((ordered / required) * 100)
-            : 0;
+      const coverage =
+        required > 0 ? Math.round((ordered / required) * 100) : 0;
 
-        res.json({
-            ...data,
-            coverage
-        });
-
+      res.json({
+        ...data,
+        coverage,
+      });
     } catch (err) {
-
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch summary" });
-
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch summary" });
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
-
-});
-
-
+  },
+);
 
 /*
 -------------------------------------------------------
 GET INDENT ITEMS
 -------------------------------------------------------
 */
-router.get('/indents/:id/items', authMiddleware, requireIndentAccess, async (req, res) => {
-
+router.get(
+  "/indents/:id/items",
+  authMiddleware,
+  requireIndentAccess,
+  async (req, res) => {
     let conn;
 
     try {
+      const indentId = req.params.id;
 
-        const indentId = req.params.id;
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
-
-        // --------------------------------------------------
-        // 🔹 GET INDENT ITEMS WITH CORRECT STATUS LOGIC
-        // --------------------------------------------------
-        const [items] = await conn.query(`
+      // --------------------------------------------------
+      // 🔹 GET INDENT ITEMS WITH CORRECT STATUS LOGIC
+      // --------------------------------------------------
+      const [items] = await conn.query(
+        `
 SELECT
   ii.id AS item_id,
   ii.product_id,
@@ -701,14 +728,16 @@ GROUP BY
   ii.uom
 
 ORDER BY ii.id;
-        `, [indentId]);
+        `,
+        [indentId],
+      );
 
-        // --------------------------------------------------
-        // 🔹 ATTACH PO DETAILS PER ITEM
-        // --------------------------------------------------
-        for (const item of items) {
-
-            const [poRows] = await conn.query(`
+      // --------------------------------------------------
+      // 🔹 ATTACH PO DETAILS PER ITEM
+      // --------------------------------------------------
+      for (const item of items) {
+        const [poRows] = await conn.query(
+          `
 
             SELECT
               po.id AS po_id,
@@ -726,49 +755,47 @@ ORDER BY ii.id;
 
             WHERE pi.indent_item_id = ?
 
-            `, [item.item_id]);
+            `,
+          [item.item_id],
+        );
 
-            item.po_details = poRows;
-        }
+        item.po_details = poRows;
+      }
 
-        res.json(items);
-
+      res.json(items);
     } catch (err) {
-
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch indent items" });
-
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch indent items" });
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
-
-});
-
-
+  },
+);
 
 /*
 -------------------------------------------------------
 GET PO HISTORY (TIMELINE)
 -------------------------------------------------------
 */
-router.get('/indents/:id/po-history', authMiddleware, requireIndentAccess, async (req, res) => {
-
+router.get(
+  "/indents/:id/po-history",
+  authMiddleware,
+  requireIndentAccess,
+  async (req, res) => {
     let conn;
 
     try {
+      const indentId = req.params.id;
 
-        const indentId = req.params.id;
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
+      const [indentRows] = await conn.query(
+        `SELECT created_at FROM indents WHERE id=?`,
+        [indentId],
+      );
 
-        const [indentRows] = await conn.query(
-            `SELECT created_at FROM indents WHERE id=?`,
-            [indentId]
-        );
-
-        const [activities] = await conn.query(`
+      const [activities] = await conn.query(
+        `
             SELECT
             po.id,
             po.po_number,
@@ -778,129 +805,117 @@ router.get('/indents/:id/po-history', authMiddleware, requireIndentAccess, async
             FROM purchase_orders po
             WHERE po.indent_id=?
             ORDER BY po.created_at ASC
-        `, [indentId]);
+        `,
+        [indentId],
+      );
 
-        const timeline = [
-            {
-                activity_type: "Indent Created",
-                created_at: indentRows[0]?.created_at
-            },
-            ...activities
-        ];
+      const timeline = [
+        {
+          activity_type: "Indent Created",
+          created_at: indentRows[0]?.created_at,
+        },
+        ...activities,
+      ];
 
-        res.json(timeline);
-
+      res.json(timeline);
     } catch (err) {
-
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch PO history" });
-
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch PO history" });
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
-
-});
+  },
+);
 
 /*
 -------------------------------------------------------
 GET PO COUNT FOR INDENT
 -------------------------------------------------------
 */
-router.get('/indents/:id/po-count', authMiddleware, requireIndentAccess, async (req, res) => {
-
+router.get(
+  "/indents/:id/po-count",
+  authMiddleware,
+  requireIndentAccess,
+  async (req, res) => {
     let conn;
 
     try {
+      const indentId = req.params.id;
 
-        const indentId = req.params.id;
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
+      // Get total number of product items in indent
+      const [totalItemsResult] = await conn.query(
+        `SELECT COUNT(DISTINCT id) as total_items FROM indent_items WHERE indent_id=?`,
+        [indentId],
+      );
 
-        // Get total number of product items in indent
-        const [totalItemsResult] = await conn.query(
-            `SELECT COUNT(DISTINCT id) as total_items FROM indent_items WHERE indent_id=?`,
-            [indentId]
-        );
-
-        // Get number of product items that have at least one PO created for them
-        const [createdItemsResult] = await conn.query(
-            `SELECT COUNT(DISTINCT pi.indent_item_id) as created_items
+      // Get number of product items that have at least one PO created for them
+      const [createdItemsResult] = await conn.query(
+        `SELECT COUNT(DISTINCT pi.indent_item_id) as created_items
              FROM po_items pi
              INNER JOIN purchase_orders po ON po.id = pi.po_id
              WHERE po.indent_id=?`,
-            [indentId]
-        );
+        [indentId],
+      );
 
-        // Get distinct PO count
-        const [poCount] = await conn.query(
-            `SELECT COUNT(DISTINCT po.id) as created 
+      // Get distinct PO count
+      const [poCount] = await conn.query(
+        `SELECT COUNT(DISTINCT po.id) as created 
              FROM purchase_orders po
              WHERE po.indent_id=?`,
-            [indentId]
-        );
+        [indentId],
+      );
 
-        const totalItems = totalItemsResult[0]?.total_items || 0;
-        const createdItems = createdItemsResult[0]?.created_items || 0;
-        const poCountValue = poCount[0]?.created || 0;
+      const totalItems = totalItemsResult[0]?.total_items || 0;
+      const createdItems = createdItemsResult[0]?.created_items || 0;
+      const poCountValue = poCount[0]?.created || 0;
 
-        res.json({
-            total: totalItems,
-            created: createdItems,
-            po_count: poCountValue
-        });
-
+      res.json({
+        total: totalItems,
+        created: createdItems,
+        po_count: poCountValue,
+      });
     } catch (err) {
-
-        console.error("PO count error:", err);
-        res.status(500).json({ error: "Failed to fetch PO count" });
-
+      console.error("PO count error:", err);
+      res.status(500).json({ error: "Failed to fetch PO count" });
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
-
-});
-
-
-
+  },
+);
 
 /*
 -------------------------------------------------------
 GET INDENT DOCUMENTS
 -------------------------------------------------------
 */
-router.get('/indents/:id/documents', authMiddleware, requireIndentAccess, async (req, res) => {
-
+router.get(
+  "/indents/:id/documents",
+  authMiddleware,
+  requireIndentAccess,
+  async (req, res) => {
     const { id } = req.params;
 
     let conn;
 
     try {
+      conn = await db.getConnection();
 
-        conn = await db.getConnection();
+      const [docs] = await conn.query(
+        `SELECT * FROM indent_documents WHERE indent_id=?`,
+        [id],
+      );
 
-        const [docs] = await conn.query(
-            `SELECT * FROM indent_documents WHERE indent_id=?`,
-            [id]
-        );
-
-        res.json(docs);
-
+      res.json(docs);
     } catch (err) {
-
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch documents" });
-
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch documents" });
     } finally {
-
-        if (conn) conn.release();
-
+      if (conn) conn.release();
     }
-
-});
+  },
+);
 
 /*
 -------------------------------------------------------
@@ -908,56 +923,65 @@ DELETE INDENT
 DELETE /api/indents/:id
 -------------------------------------------------------
 */
-router.delete('/indents/:id', authMiddleware, requireIndentCreation, async (req, res) => {
+router.delete(
+  "/indents/:id",
+  authMiddleware,
+  requireIndentCreation,
+  async (req, res) => {
     let conn;
     try {
-        const indentId = req.params.id;
+      const indentId = req.params.id;
 
-        if (!indentId) {
-            return res.status(400).json({ error: "Indent ID is required" });
-        }
+      if (!indentId) {
+        return res.status(400).json({ error: "Indent ID is required" });
+      }
 
-        conn = await db.getConnection();
+      conn = await db.getConnection();
 
-        // Check if indent exists
-        const [[indent]] = await conn.query(
-            'SELECT id, status FROM indents WHERE id = ?',
-            [indentId]
-        );
+      // Check if indent exists
+      const [[indent]] = await conn.query(
+        "SELECT id, status FROM indents WHERE id = ?",
+        [indentId],
+      );
 
-        if (!indent) {
-            return res.status(404).json({ error: "Indent not found" });
-        }
+      if (!indent) {
+        return res.status(404).json({ error: "Indent not found" });
+      }
 
-        // Begin transaction
-        await conn.beginTransaction();
+      // Begin transaction
+      await conn.beginTransaction();
 
-        try {
-            // Delete indent items first (foreign key constraint)
-            await conn.query('DELETE FROM indent_items WHERE indent_id = ?', [indentId]);
+      try {
+        // Delete indent items first (foreign key constraint)
+        await conn.query("DELETE FROM indent_items WHERE indent_id = ?", [
+          indentId,
+        ]);
 
-            // Delete indent documents if any
-            await conn.query('DELETE FROM indent_documents WHERE indent_id = ?', [indentId]);
+        // Delete indent documents if any
+        await conn.query("DELETE FROM indent_documents WHERE indent_id = ?", [
+          indentId,
+        ]);
 
-            // Delete the indent
-            await conn.query('DELETE FROM indents WHERE id = ?', [indentId]);
+        // Delete the indent
+        await conn.query("DELETE FROM indents WHERE id = ?", [indentId]);
 
-            // Commit transaction
-            await conn.commit();
+        // Commit transaction
+        await conn.commit();
 
-            res.json({ success: true, message: "Indent deleted successfully" });
-        } catch (err) {
-            await conn.rollback();
-            throw err;
-        }
+        res.json({ success: true, message: "Indent deleted successfully" });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      }
     } catch (err) {
-        console.error("Delete indent error:", err);
-        res.status(500).json({ error: "Failed to delete indent", details: err.message });
+      console.error("Delete indent error:", err);
+      res
+        .status(500)
+        .json({ error: "Failed to delete indent", details: err.message });
     } finally {
-        if (conn) conn.release();
+      if (conn) conn.release();
     }
-});
-
-
+  },
+);
 
 module.exports = router;

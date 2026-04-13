@@ -16,7 +16,6 @@ interface Product {
 interface Item {
     product_id: number | null;
     product_name: string;
-    
     product_description: string;
     quantity: number;
 }
@@ -199,6 +198,7 @@ export default function EditIndent() {
             {
                 product_id: null,
                 product_name: "",
+                
                 product_description: "",
                 quantity: 1,
             },
@@ -652,7 +652,7 @@ export default function EditIndent() {
                                             <tr className="border-b border-gray-200 bg-gray-50">
                                                 <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">#</th>
                                                 <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">Product</th>
-                                               
+
                                                 <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">Quantity</th>
                                                 <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">Action</th>
                                             </tr>
