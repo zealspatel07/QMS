@@ -378,6 +378,86 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// ---------- AUTO MIGRATIONS (Railway-safe) ----------
+/**
+ * Automatically discovers and runs all migration files on startup.
+ * New migrations just need to be added to the migrations folder - no changes needed to this file.
+ * 
+ * Migration format: 01_xxx.js, 02_xxx.js, etc. (numbered prefix required)
+ * Each migration runs in a separate Node process so it can safely exit.
+ */
+async function runAllMigrationsOnStartup() {
+  const fs = require('fs');
+  const path = require('path');
+  
+  const migrationsDir = path.join(__dirname, 'migrations');
+  
+  // Blacklist common non-migration files
+  const blacklist = new Set([
+    'run-all-migrations.js',
+    'run-all-migrations-railway.js',
+    'PHASE3_MIGRATIONS.js',
+  ]);
+
+  try {
+    // Discover all migration files: 01_xxx.js, 02_xxx.js, etc.
+    const allFiles = fs.readdirSync(migrationsDir);
+    const migrationFiles = allFiles
+      .filter((f) => {
+        if (!f.endsWith('.js') || blacklist.has(f)) return false;
+        // Must start with digits: 01_*, 02_*, etc.
+        const match = /^(\d+)_/.exec(f);
+        if (!match) return false;
+        const num = Number(match[1]);
+        return Number.isFinite(num) && num >= 1;
+      })
+      .sort(); // Sort by number: 01_xxx, 02_xxx, etc.
+
+    if (migrationFiles.length === 0) {
+      console.log('✅ No migrations to run');
+      return;
+    }
+
+    console.log(`\n🚀 Running ${migrationFiles.length} auto-migrations...\n`);
+
+    // Build migration environment from process.env
+    const migrationEnv = {
+      ...process.env,
+      // Handle Railway DATABASE_URL if provided
+      DB_HOST: process.env.DB_HOST || process.env.MYSQLHOST,
+      DB_USER: process.env.DB_USER || process.env.MYSQLUSER,
+      DB_PASSWORD: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
+      DB_PORT: process.env.DB_PORT || process.env.MYSQLPORT || '3306',
+      DB_NAME: process.env.DB_NAME || process.env.MYSQLDATABASE,
+    };
+
+    // Run each migration in a separate process (so it can safely exit)
+    for (const file of migrationFiles) {
+      const fullPath = path.join(migrationsDir, file);
+      console.log(`  ⏳ Running: ${file}`);
+
+      const result = spawnSync(process.execPath, [fullPath], {
+        stdio: 'inherit',
+        env: migrationEnv,
+      });
+
+      const exitCode = typeof result.status === 'number' ? result.status : 1;
+      if (exitCode !== 0) {
+        console.error(`\n  ❌ Migration failed: ${file} (exit code ${exitCode})`);
+        console.error('   Stopping migration sequence.');
+        throw new Error(`Migration ${file} failed`);
+      }
+    }
+
+    console.log('\n✅ All migrations completed successfully!\n');
+
+  } catch (err) {
+    console.error('❌ Migration runner error:', err.message);
+    // In Railway/production, we may want to exit here, but allowing server to start for debugging
+    console.error('   Warning: Server starting despite migration errors');
+  }
+}
+
 // ---------- Helpers ----------
 function nameToInitials(name) {
   if (!name) return '';
@@ -5254,6 +5334,9 @@ if (require.main === module) {
 
   (async () => {
     try {
+      // 🔧 Run all migrations first (auto-discovery)
+      await runAllMigrationsOnStartup();
+
       const { httpServer, io } = await createServerAndIO();
 
       httpServer.listen(PORT, () => {
