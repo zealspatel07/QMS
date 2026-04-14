@@ -385,6 +385,8 @@ const JWT_SECRET = process.env.JWT_SECRET;
  * 
  * Migration format: 01_xxx.js, 02_xxx.js, etc. (numbered prefix required)
  * Each migration runs in a separate Node process so it can safely exit.
+ * 
+ * Handles both local .env and Railway DATABASE_URL parsing.
  */
 async function runAllMigrationsOnStartup() {
   const fs = require('fs');
@@ -420,16 +422,33 @@ async function runAllMigrationsOnStartup() {
 
     console.log(`\n🚀 Running ${migrationFiles.length} auto-migrations...\n`);
 
-    // Build migration environment from process.env
-    const migrationEnv = {
-      ...process.env,
-      // Handle Railway DATABASE_URL if provided
-      DB_HOST: process.env.DB_HOST || process.env.MYSQLHOST,
-      DB_USER: process.env.DB_USER || process.env.MYSQLUSER,
-      DB_PASSWORD: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
-      DB_PORT: process.env.DB_PORT || process.env.MYSQLPORT || '3306',
-      DB_NAME: process.env.DB_NAME || process.env.MYSQLDATABASE,
-    };
+    // Build migration environment: parse DATABASE_URL for Railway compatibility
+    const migrationEnv = { ...process.env };
+
+    // Try to parse DATABASE_URL if provided (Railway)
+    const databaseUrl = process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.MYSQLDATABASE_URL;
+    if (databaseUrl) {
+      try {
+        const url = new URL(databaseUrl);
+        migrationEnv.DB_HOST = migrationEnv.DB_HOST || url.hostname;
+        migrationEnv.DB_USER = migrationEnv.DB_USER || decodeURIComponent(url.username || '');
+        migrationEnv.DB_PASSWORD = migrationEnv.DB_PASSWORD || decodeURIComponent(url.password || '');
+        migrationEnv.DB_PORT = migrationEnv.DB_PORT || String(url.port || '3306');
+        migrationEnv.DB_NAME = migrationEnv.DB_NAME || (url.pathname || '').replace(/^\//, '');
+        console.log('📡 Parsed DATABASE_URL for migrations');
+      } catch (e) {
+        console.warn('⚠️  Could not parse DATABASE_URL:', e.message);
+      }
+    }
+
+    // Fallback to Railway MySQL plugin environment variables
+    migrationEnv.DB_HOST = migrationEnv.DB_HOST || process.env.MYSQLHOST;
+    migrationEnv.DB_USER = migrationEnv.DB_USER || process.env.MYSQLUSER;
+    migrationEnv.DB_PASSWORD = migrationEnv.DB_PASSWORD || process.env.MYSQLPASSWORD;
+    migrationEnv.DB_PORT = migrationEnv.DB_PORT || process.env.MYSQLPORT || '3306';
+    migrationEnv.DB_NAME = migrationEnv.DB_NAME || process.env.MYSQLDATABASE;
+
+    console.log(`📊 Migration connection: ${migrationEnv.DB_USER}@${migrationEnv.DB_HOST}:${migrationEnv.DB_PORT} / ${migrationEnv.DB_NAME}\n`);
 
     // Run each migration in a separate process (so it can safely exit)
     for (const file of migrationFiles) {
