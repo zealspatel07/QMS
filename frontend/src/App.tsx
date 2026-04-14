@@ -39,6 +39,23 @@ import VendorView from "./pages/VendorView";
 import CreateVendor from "./pages/CreateVendor";
 import EditVendor from "./pages/EditVendor";
 
+/* ERP SALES/INVENTORY/FINANCE */
+import Enquiries from "./pages/Enquiries";
+import SalesOrders from "./pages/SalesOrders";
+import SalesOrderView from "./pages/SalesOrderView";
+import Dispatch from "./pages/Dispatch";
+import DispatchCreate from "./pages/DispatchCreate";
+import DispatchView from "./pages/DispatchView";
+import GRN from "./pages/GRN";
+import StockLedger from "./pages/StockLedger";
+import InStockView from "./pages/InStockView";
+import Invoices from "./pages/Invoices";
+import Payments from "./pages/Payments";
+import TallyExport from "./pages/TallyExport";
+import EnquiryCreate from "./pages/EnquiryCreate";
+import EnquiryEdit from "./pages/EnquiryEdit";
+import EnquiryView from "./pages/EnquiryView";
+
 /* ---------------- Protected Shell ---------------- */
 type Props = { children: React.ReactNode };
 
@@ -315,6 +332,134 @@ export default function App() {
           element={
             <ProtectedApp>
               <Products />
+            </ProtectedApp>
+          }
+        />
+
+        {/* ---------------- ERP: SALES / DISPATCH / FINANCE ---------------- */}
+        <Route
+          path="/enquiries"
+          element={
+            <ProtectedApp>
+              <Enquiries />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/enquiries/create"
+          element={
+            <ProtectedApp>
+              <EnquiryCreate />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/enquiries/:id/edit"
+          element={
+            <ProtectedApp>
+              <EnquiryEdit />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/enquiries/:id"
+          element={
+            <ProtectedApp>
+              <EnquiryView />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/sales-orders"
+          element={
+            <ProtectedApp>
+              <SalesOrders />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/sales-orders/:id"
+          element={
+            <ProtectedApp>
+              <SalesOrderView />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/dispatch"
+          element={
+            <ProtectedApp>
+              <Dispatch />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/dispatch/create"
+          element={
+            <ProtectedApp>
+              <DispatchCreate />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/dispatch/:id"
+          element={
+            <ProtectedApp>
+              <DispatchView />
+            </ProtectedApp>
+          }
+        />
+
+        {/* ---------------- ERP: PROCUREMENT / GRN ---------------- */}
+        <Route
+          path="/grn"
+          element={
+            <ProtectedApp>
+              <GRN />
+            </ProtectedApp>
+          }
+        />
+
+        {/* ---------------- ERP: INVENTORY ---------------- */}
+        <Route
+          path="/stock-ledger"
+          element={
+            <ProtectedApp>
+              <StockLedger />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/in-stock"
+          element={
+            <ProtectedApp>
+              <InStockView />
+            </ProtectedApp>
+          }
+        />
+
+        {/* ---------------- ERP: FINANCE ---------------- */}
+        <Route
+          path="/invoices"
+          element={
+            <ProtectedApp>
+              <Invoices />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/payments"
+          element={
+            <ProtectedApp>
+              <Payments />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/tally-export"
+          element={
+            <ProtectedApp>
+              <TallyExport />
             </ProtectedApp>
           }
         />

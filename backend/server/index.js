@@ -43,6 +43,12 @@ const customerRoutes = require("./routes/customers");
 const indentRoutes = require('./routes/indent');
 const purchaseRoutes = require("./routes/purchaseOrders");
 const vendorRoutes = require("./routes/vendors");
+const enquiriesModuleRoutes = require("./modules/enquiries/routes");
+const salesOrdersModuleRoutes = require("./modules/salesOrders/routes");
+const stockLedgerModuleRoutes = require("./modules/stockLedger/routes");
+const dispatchesModuleRoutes = require("./modules/dispatches/routes");
+const invoicesModuleRoutes = require("./modules/invoices/routes");
+const tallyModuleRoutes = require("./modules/tally/routes");
 const app = express();
 
 const XLSX = require('xlsx');
@@ -355,6 +361,13 @@ app.use("/api/dashboard", authMiddleware, requireAdminOrPurchase, purchaseDashbo
 app.use("/api", indentRoutes);
 app.use("/api", purchaseRoutes);
 app.use("/api", vendorRoutes);
+// ---------- ERP modular routes (Step 2) ----------
+app.use("/api", enquiriesModuleRoutes);
+app.use("/api", salesOrdersModuleRoutes);
+app.use("/api", stockLedgerModuleRoutes);
+app.use("/api", dispatchesModuleRoutes);
+app.use("/api", invoicesModuleRoutes);
+app.use("/api", tallyModuleRoutes);
 app.use("/uploads", express.static("uploads"));
 
 // App-level constants
@@ -578,6 +591,23 @@ async function getNextQuotationNumber(conn, fyCode, salespersonName) {
 
   }
 
+  return `QT${fyCode}${String(nextNumber).padStart(3, '0')}`;
+}
+
+// Preview-only generator: does NOT lock or write.
+// Used by GET /api/quotations/next so UI can show the next number without mutating sequences.
+async function getNextQuotationNumberPreview(conn, fyCode) {
+  const [rows] = await conn.query(
+    `
+      SELECT last_number
+      FROM quotation_sequences
+      WHERE financial_year = ?
+      LIMIT 1
+    `,
+    [fyCode],
+  );
+  const last = rows && rows[0] && Number(rows[0].last_number || 0) ? Number(rows[0].last_number || 0) : 0;
+  const nextNumber = last + 1;
   return `QT${fyCode}${String(nextNumber).padStart(3, '0')}`;
 }
 
@@ -1113,6 +1143,62 @@ async function runLegacyMigrationsFromIndexIfEnabled() {
   console.log("✅ Migrations completed.");
 }
 
+async function ensureEnquiriesExtendedColumns() {
+  let conn;
+  try {
+    conn = await db.getConnection();
+    const schema =
+      process.env.DB_NAME ||
+      process.env.MYSQLDATABASE ||
+      process.env.MYSQL_DATABASE ||
+      DB_NAME;
+    if (!schema) return;
+
+    const [[t]] = await conn.query(
+      `SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = ? AND table_name = 'enquiries'`,
+      [schema]
+    );
+    if (!Number(t?.c)) return;
+
+    async function colExists(name) {
+      const [[r]] = await conn.query(
+        `SELECT COUNT(*) AS c FROM information_schema.columns WHERE table_schema = ? AND table_name = 'enquiries' AND column_name = ?`,
+        [schema, name]
+      );
+      return Number(r?.c) > 0;
+    }
+
+    if (!(await colExists("customer_location_id"))) {
+      await conn.query(`ALTER TABLE enquiries ADD COLUMN customer_location_id INT NULL AFTER customer_id`);
+      console.log("✅ Added enquiries.customer_location_id");
+    }
+    if (!(await colExists("customer_contact_id"))) {
+      await conn.query(`ALTER TABLE enquiries ADD COLUMN customer_contact_id INT NULL AFTER customer_location_id`);
+      console.log("✅ Added enquiries.customer_contact_id");
+    }
+    if (!(await colExists("location_snapshot"))) {
+      await conn.query(`ALTER TABLE enquiries ADD COLUMN location_snapshot JSON NULL AFTER customer_snapshot`);
+      console.log("✅ Added enquiries.location_snapshot");
+    }
+    if (!(await colExists("contact_snapshot"))) {
+      await conn.query(`ALTER TABLE enquiries ADD COLUMN contact_snapshot JSON NULL AFTER location_snapshot`);
+      console.log("✅ Added enquiries.contact_snapshot");
+    }
+    if (!(await colExists("items"))) {
+      await conn.query(`ALTER TABLE enquiries ADD COLUMN items JSON NULL AFTER notes`);
+      console.log("✅ Added enquiries.items");
+    }
+    if (!(await colExists("lost_reason"))) {
+      await conn.query(`ALTER TABLE enquiries ADD COLUMN lost_reason TEXT NULL AFTER items`);
+      console.log("✅ Added enquiries.lost_reason");
+    }
+  } catch (e) {
+    console.warn("ensureEnquiriesExtendedColumns:", e?.message || e);
+  } finally {
+    if (conn) try { await conn.release(); } catch (e) {}
+  }
+}
+
 (async function initDatabaseSchema() {
   try {
     await runLegacyMigrationsFromIndexIfEnabled();
@@ -1127,6 +1213,7 @@ async function runLegacyMigrationsFromIndexIfEnabled() {
     await ensureQuotationDecisionsTable();
     await ensureQuotationVersionsTable();
     await ensureAppSettingsTable();
+    await ensureEnquiriesExtendedColumns();
     await ensureAdminUser();
 
     await ensureNotificationsTable();
@@ -1177,9 +1264,8 @@ try {
 }
 
 try {
-  const salesOrdersRouter = require('./routes/sales-orders');
-  app.use('/api/sales-orders', salesOrdersRouter);
-  console.log('Mounted /api/sales-orders router from ./routes/sales-orders');
+  // Sales Orders module mounted at /api/sales-orders via modules/salesOrders/routes.js
+  console.log('Mounted /api/sales-orders router from ./modules/salesOrders/routes');
 } catch (err) {
   console.warn('sales-orders router not mounted:', err && err.message);
 }
@@ -1889,21 +1975,8 @@ async function handleNextQuotation(req, res) {
     // 📅 Financial Year (April → March)
     const fyCode = buildFiscalYearStringForDate(new Date());
 
-    /**
-     * 🔐 IMPORTANT:
-     * We use transaction ONLY to reuse locking logic
-     * but we DO NOT persist anything (preview mode)
-     */
-    await conn.beginTransaction();
-
-    const quotation_no = await getNextQuotationNumber(
-      conn,
-      fyCode,
-      sp.name // or initials depending on your logic
-    );
-
-    // ❗ Always rollback (this is preview, not creation)
-    await conn.rollback();
+    // ✅ Preview mode: do NOT lock or update sequences
+    const quotation_no = await getNextQuotationNumberPreview(conn, fyCode);
 
     // ✅ Correct API response
     return res.json({
@@ -1911,14 +1984,11 @@ async function handleNextQuotation(req, res) {
     });
 
   } catch (err) {
-    if (conn) {
-      try { await conn.rollback(); } catch { }
-    }
-
     console.error('failed to build next quotation number', err);
 
     return res.status(500).json({
-      error: 'server_error'
+      error: 'server_error',
+      details: process.env.NODE_ENV === 'production' ? undefined : (err && err.message) || String(err)
     });
 
   } finally {

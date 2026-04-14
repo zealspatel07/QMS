@@ -465,7 +465,7 @@ export default function QuotationView() {
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [creatingOrder] = useState(false);
+  const [creatingOrder, setCreatingOrder] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"approve" | "reject" | null>(null);
@@ -1964,6 +1964,29 @@ Regards,`
     navigate(`/create-indent`, { state: { quotationId: quote.id, quotationNo: quote.quotation_no, quotationData: quote } });
   }
 
+  async function handleConvertToSalesOrder() {
+    if (!quote) return;
+    try {
+      setCreatingOrder(true);
+      const resp = await api.createSalesOrderFromQuotation(quote.id);
+      setShowCreateOrderModal(false);
+      const soId = resp?.id;
+      if (soId) {
+        setToast("Sales Order created.");
+        navigate(`/sales-orders/${soId}`);
+      } else {
+        setToast(resp?.message || "Sales Order created.");
+        navigate(`/sales-orders`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err?.message || "Failed to create Sales Order");
+      setErrorOpen(true);
+    } finally {
+      setCreatingOrder(false);
+    }
+  }
+
   // Helper: Render next followup
   function getNextFollowupInfo() {
     // Use the calculated nextPlannedFollowup memo instead of quote.next_followup_date
@@ -2330,11 +2353,13 @@ Regards,`
     open,
     onClose,
     onCreateIndent,
+    onConvertToSalesOrder,
     isLoading,
   }: {
     open: boolean;
     onClose: () => void;
     onCreateIndent: () => void;
+    onConvertToSalesOrder: () => void;
     isLoading: boolean;
   }) {
     if (!open) return null;
@@ -2352,13 +2377,25 @@ Regards,`
 
           {/* CONTENT */}
           <div className="px-6 py-6">
-            <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 mb-4">
               <div className="flex items-start gap-3">
                 <div className="text-2xl">📋</div>
                 <div>
                   <h4 className="font-semibold text-indigo-900">Create Indent</h4>
                   <p className="text-sm text-indigo-700 mt-1">
                     Creates an indent for this quotation which can be used to generate purchase orders
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-2xl">🧾</div>
+                <div>
+                  <h4 className="font-semibold text-emerald-900">Convert to Sales Order</h4>
+                  <p className="text-sm text-emerald-700 mt-1">
+                    Locks pricing snapshot and enables dispatch + invoicing flow
                   </p>
                 </div>
               </div>
@@ -2373,6 +2410,13 @@ Regards,`
               className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
               Cancel
+            </button>
+            <button
+              onClick={onConvertToSalesOrder}
+              disabled={isLoading}
+              className="px-4 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {isLoading ? "Working..." : "Convert to Sales Order"}
             </button>
             <button
               onClick={onCreateIndent}
@@ -3664,6 +3708,7 @@ Regards,`
         open={showCreateOrderModal}
         onClose={() => setShowCreateOrderModal(false)}
         onCreateIndent={handleCreateIndent}
+        onConvertToSalesOrder={handleConvertToSalesOrder}
         isLoading={creatingOrder}
       />
 

@@ -92,14 +92,7 @@ const TopBar: React.FC = () => {
           </button>
 
           <a href="/" className="flex items-center gap-3 no-underline">
-            <img
-              // Use the uploaded file path for preview here; fallback to /logo.png for normal dev/prod
-              src="/mnt/data/036436f6-8060-40d3-a735-586e61b7f470.png"
-              alt="Prayosha Automation"
-              className="h-15 w-20 rounded-md object-contain"
-              loading="lazy"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/logo.png"; }}
-            />
+           
             <div className="hidden md:block leading-tight">
 
             </div>

@@ -1,8 +1,9 @@
 // src/api.ts
 export const API_URL = import.meta.env.VITE_API_BASE || "";
-// During development, if VITE_API_BASE is not set, fall back to localhost:3001
-const BASE = import.meta.env.VITE_API_BASE || "";
-console.log("API BASE (resolved):", BASE, "(env VITE_API_BASE=", import.meta.env.VITE_API_BASE, ")");
+// In local dev we rely on Vite proxy (/api -> http://localhost:3001),
+// so force relative URLs. In production, use VITE_API_BASE when provided.
+const BASE = (import.meta as any).env?.DEV ? "" : (import.meta as any).env?.VITE_API_BASE || "";
+console.log("API BASE (resolved):", BASE, "(DEV=", (import.meta as any).env?.DEV, ", VITE_API_BASE=", (import.meta as any).env?.VITE_API_BASE, ")");
 
 /* ===== CURRENT USER ROLE HELPER ===== */
 export function getCurrentUserRole(): string | null {
@@ -182,6 +183,50 @@ export interface ApiShape {
 
   // create order flow from quotation
   createOrderFromQuotation: (quotationId: number | string) => Promise<any>;
+
+  // sales order (quotation -> sales order)
+  createSalesOrderFromQuotation: (quotationId: number | string) => Promise<any>;
+
+  // enquiries
+  getEnquiries: (filters?: { status?: string; from?: string; to?: string; limit?: number; q?: string }) => Promise<any[]>;
+  createEnquiry: (payload: any) => Promise<any>;
+  getEnquiry: (id: number | string) => Promise<any>;
+  updateEnquiry: (id: number | string, payload: any) => Promise<any>;
+  deleteEnquiry: (id: number | string) => Promise<any>;
+  convertEnquiryToQuotation: (id: number | string, payload?: any) => Promise<any>;
+
+  // sales orders
+  getSalesOrders: (filters?: { status?: string; from?: string; to?: string; limit?: number }) => Promise<any[]>;
+  getSalesOrderById: (id: number | string) => Promise<any>;
+  getSalesOrder: (id: number | string) => Promise<any>;
+  createSalesOrder: (payload: any) => Promise<any>;
+  updateSalesOrder: (id: number | string, payload: any) => Promise<any>;
+  deleteSalesOrder: (id: number | string) => Promise<any>;
+
+  // dispatch
+  getDispatches: (filters?: { sales_order_id?: number | string; status?: string; from?: string; to?: string; limit?: number }) => Promise<any[]>;
+  getDispatchById: (id: number | string) => Promise<any>;
+  getDispatch: (id: number | string) => Promise<any>;
+  createDispatch: (payload: any) => Promise<any>;
+  updateDispatch: (id: number | string, payload: any) => Promise<any>;
+  deleteDispatch: (id: number | string) => Promise<any>;
+
+  // invoices
+  getInvoices: (filters?: { payment_status?: string; status?: string; from?: string; to?: string; limit?: number }) => Promise<any[]>;
+  getInvoiceById: (id: number | string) => Promise<any>;
+  createInvoiceFromDispatch: (dispatchId: number | string, payload?: any) => Promise<any>;
+  updateInvoicePayment: (invoiceId: number | string, payload: { amount_paid?: number; add_amount?: number }) => Promise<any>;
+
+  // stock ledger
+  getAvailableStock: (productId: number | string) => Promise<{ product_id: number; available_qty: number }>;
+  getAvailableStockBulk: (productIds: Array<number | string>) => Promise<Array<{ product_id: number; available_qty: number }>>;
+  getStockLedger: (filters?: { product_id?: number | string; txn_type?: string; direction?: string; from?: string; to?: string; limit?: number; offset?: number }) => Promise<any[]>;
+  getInStock: (filters?: { q?: string; limit?: number; only_positive?: boolean }) => Promise<any[]>;
+  postGrnFromPo: (poId: number | string, payload?: { grn_date?: string; remarks?: string }) => Promise<any>;
+  postManualStockInward: (payload: { grn_date?: string; remarks?: string; items: Array<{ product_id: number; quantity: number; uom?: string; unit_cost?: number; remarks?: string }> }) => Promise<any>;
+
+  // tally export
+  exportInvoicesForTally: (filters?: { from?: string; to?: string; payment_status?: string; status?: string; limit?: number }) => Promise<any>;
 
 
   /* ================= VENDORS ================= */
@@ -940,6 +985,179 @@ export const api: ApiShape = {
       method: "POST",
       body: JSON.stringify({}),
     }),
+
+  /* ================= QUOTATION -> SALES ORDER ================= */
+  createSalesOrderFromQuotation: (quotationId: number | string) =>
+    requestJson(`/api/sales-orders/from-quotation/${quotationId}`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  /* ================= ENQUIRIES ================= */
+  getEnquiries: (filters) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    if (filters?.q) params.set("q", String(filters.q));
+    const qs = params.toString();
+    return requestJson(qs ? `/api/enquiries?${qs}` : "/api/enquiries").then((r) => (Array.isArray(r) ? r : []));
+  },
+  createEnquiry: (payload) =>
+    requestJson("/api/enquiries", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    }),
+  getEnquiry: (id) => requestJson(`/api/enquiries/${id}`),
+  updateEnquiry: (id, payload) =>
+    requestJson(`/api/enquiries/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload || {}),
+    }),
+  deleteEnquiry: (id) =>
+    requestJson(`/api/enquiries/${id}`, {
+      method: "DELETE",
+    }),
+
+  convertEnquiryToQuotation: (id, payload = {}) =>
+    requestJson(`/api/enquiries/${id}/convert-to-quotation`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    }),
+
+  /* ================= SALES ORDERS ================= */
+  getSalesOrders: (filters) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    const qs = params.toString();
+    return requestJson(qs ? `/api/sales-orders?${qs}` : "/api/sales-orders").then((r) => (Array.isArray(r) ? r : []));
+  },
+  getSalesOrderById: (id) => requestJson(`/api/sales-orders/${id}`),
+  getSalesOrder: (id) => requestJson(`/api/sales-orders/${id}`),
+  createSalesOrder: (payload) =>
+    requestJson("/api/sales-orders", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    }),
+  updateSalesOrder: (id, payload) =>
+    requestJson(`/api/sales-orders/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload || {}),
+    }),
+  deleteSalesOrder: (id) =>
+    requestJson(`/api/sales-orders/${id}`, {
+      method: "DELETE",
+    }),
+
+  /* ================= DISPATCH ================= */
+  getDispatches: (filters) => {
+    const params = new URLSearchParams();
+    if (filters?.sales_order_id) params.set("sales_order_id", String(filters.sales_order_id));
+    if (filters?.status) params.set("status", String(filters.status));
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    const qs = params.toString();
+    return requestJson(qs ? `/api/dispatches?${qs}` : "/api/dispatches").then((r) => (Array.isArray(r) ? r : []));
+  },
+  getDispatchById: (id) => requestJson(`/api/dispatches/${id}`),
+  getDispatch: (id) => requestJson(`/api/dispatches/${id}`),
+  createDispatch: (payload) =>
+    requestJson("/api/dispatches", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    }),
+  updateDispatch: (id, payload) =>
+    requestJson(`/api/dispatches/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload || {}),
+    }),
+  deleteDispatch: (id) =>
+    requestJson(`/api/dispatches/${id}`, {
+      method: "DELETE",
+    }),
+
+  /* ================= INVOICES ================= */
+  getInvoices: (filters) => {
+    const params = new URLSearchParams();
+    if (filters?.payment_status) params.set("payment_status", String(filters.payment_status));
+    if (filters?.status) params.set("status", String(filters.status));
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    const qs = params.toString();
+    return requestJson(qs ? `/api/invoices?${qs}` : "/api/invoices").then((r) => (Array.isArray(r) ? r : []));
+  },
+  getInvoiceById: (id) => requestJson(`/api/invoices/${id}`),
+  createInvoiceFromDispatch: (dispatchId, payload = {}) =>
+    requestJson(`/api/invoices/from-dispatch/${dispatchId}`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    }),
+  updateInvoicePayment: (invoiceId, payload) =>
+    requestJson(`/api/invoices/${invoiceId}/payment`, {
+      method: "PUT",
+      body: JSON.stringify(payload || {}),
+    }),
+
+  /* ================= STOCK LEDGER / GRN ================= */
+  getAvailableStock: (productId) => requestJson(`/api/stock-ledger/available/${productId}`),
+  getAvailableStockBulk: (productIds) => {
+    const ids = (Array.isArray(productIds) ? productIds : [])
+      .map((x) => String(x))
+      .filter(Boolean)
+      .join(",");
+    return requestJson(`/api/stock-ledger/available?product_ids=${encodeURIComponent(ids)}`).then((r) =>
+      Array.isArray(r) ? r : [],
+    );
+  },
+  getStockLedger: (filters) => {
+    const params = new URLSearchParams();
+    if (filters?.product_id) params.set("product_id", String(filters.product_id));
+    if (filters?.txn_type) params.set("txn_type", String(filters.txn_type));
+    if (filters?.direction) params.set("direction", String(filters.direction));
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    if (filters?.offset) params.set("offset", String(filters.offset));
+    const qs = params.toString();
+    return requestJson(qs ? `/api/stock-ledger?${qs}` : "/api/stock-ledger").then((r) => (Array.isArray(r) ? r : []));
+  },
+  getInStock: (filters) => {
+    const params = new URLSearchParams();
+    if (filters?.q) params.set("q", String(filters.q));
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    if (filters?.only_positive != null) params.set("only_positive", String(filters.only_positive));
+    const qs = params.toString();
+    return requestJson(qs ? `/api/in-stock?${qs}` : "/api/in-stock").then((r) => (Array.isArray(r) ? r : []));
+  },
+  postGrnFromPo: (poId, payload = {}) =>
+    requestJson(`/api/grn/from-po/${poId}`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    }),
+
+  postManualStockInward: (payload) =>
+    requestJson(`/api/stock-ledger/inward-grn`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    }),
+
+  /* ================= TALLY EXPORT ================= */
+  exportInvoicesForTally: (filters) => {
+    const params = new URLSearchParams();
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    if (filters?.payment_status) params.set("payment_status", String(filters.payment_status));
+    if (filters?.status) params.set("status", String(filters.status));
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    const qs = params.toString();
+    return requestJson(qs ? `/api/tally/invoices?${qs}` : "/api/tally/invoices");
+  },
 
   /* ================= REPORTS (🔥 REQUIRED) ================= */
   getReportKpis: () => requestJson("/api/reports/kpis"),

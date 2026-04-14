@@ -15,6 +15,12 @@ import {
   UserCog,
   ClipboardList,
   Truck,
+  ClipboardCheck,
+  ShoppingCart,
+  Send,
+  Receipt,
+  Wallet,
+  Layers,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -26,6 +32,13 @@ type NavItem = {
   label: string;
   icon: React.ReactNode;
   path: string;
+  visible: boolean;
+};
+
+type NavSection = {
+  key: string;
+  title: string;
+  items: NavItem[];
   visible: boolean;
 };
 
@@ -46,13 +59,7 @@ const Logo: React.FC<{ collapsed?: boolean }> = ({ collapsed = false }) => (
       className={`rounded-md overflow-hidden flex items-center ${collapsed ? "w-12 h-12" : "w-40 h-14"
         } p-2 bg-white/90`}
     >
-      <img
-        src="/logo.png"
-        alt="Prayosha Automation"
-        className={`object-contain ${collapsed ? "w-8 h-8" : "w-full h-full"
-          }`}
-        draggable={false}
-      />
+      
     </div>
 
     {!collapsed && (
@@ -115,101 +122,204 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   /* ---------- NAV CONFIG ---------- */
 
-const navItems: NavItem[] = [
-  {
-    key: "dashboard",
-    label: "Dashboard",
-    icon: <LayoutDashboard size={18} />,
-    path: "/dashboard",
-    visible: user?.role === "sales" || user?.role === "admin",
-  },
-  {
-    key: "purchase_dashboard",
-    label: "Procurement",
-    icon: <BarChart2 size={18} />,
-    path: "/purchase-dashboard",
-    visible: user?.role === "purchase" || user?.role === "admin",
-  },
-  {
-    key: "quotations",
-    label: "Quotations",
-    icon: <FileText size={18} />,
-    path: "/quotations",
-    visible: user?.role === "sales" || user?.role === "admin",
-  },
-  {
-    key: "indents",
-    label: "Indents",
-    icon: <ClipboardList size={18} />,
-    path: "/indents",
-    visible:
-      user?.role === "sales" ||
-      user?.role === "purchase" ||
-      user?.role === "admin",
-  },
-  {
-    key: "purchase_orders",
-    label: "Purchase Orders",
-    icon: <Package size={18} />,
-    path: "/purchase-orders",
-    visible: user?.role === "purchase" || user?.role === "admin",
-  },
-  {
-    key: "vendors",
-    label: "Vendors",
-    icon: <Truck size={18} />,
-    path: "/vendors",
-    visible: user?.role === "purchase" || user?.role === "admin",
-  },
-  {
-    key: "customers",
-    label: "Customers",
-    icon: <Building2 size={18} />,
-    path: "/customers",
-    visible: user?.role === "sales" || user?.role === "admin",
-  },
-  {
-    key: "products",
-    label: "Products",
-    icon: <Package size={18} />,
-    path: "/products",
-    visible: true,
-  },
-  {
-    key: "reports",
-    label: "Reports",
-    icon: <BarChart2 size={18} />,
-    path: "/reports",
-    visible:
-      user?.role === "admin" ||
-      user?.role === "sales" ||
-      user?.role === "purchase",
-  },
-
-  // ADMIN
-  {
-    key: "users",
-    label: "User Management",
-    icon: <UserCog size={18} />,
-    path: "/user-management",
-    visible: user?.role === "admin",
-  },
-  {
-    key: "settings",
-    label: "System Settings",
-    icon: <Settings size={18} />,
-    path: "/system-settings",
-    visible: user?.role === "admin",
-  },
-
-  {
-    key: "profile",
-    label: "My Profile",
-    icon: <User size={18} />,
-    path: "/user-profile",
-    visible: true,
-  },
-];
+  const sections: NavSection[] = [
+    {
+      key: "sales",
+      title: "Sales",
+      visible: user?.role === "sales" || user?.role === "admin",
+      items: [
+        {
+          key: "dashboard",
+          label: "Dashboard",
+          icon: <LayoutDashboard size={18} />,
+          path: "/dashboard",
+          visible: user?.role === "sales" || user?.role === "admin",
+        },
+        {
+          key: "enquiries",
+          label: "Enquiries",
+          icon: <ClipboardCheck size={18} />,
+          path: "/enquiries",
+          visible: user?.role === "sales" || user?.role === "admin",
+        },
+        {
+          key: "quotations",
+          label: "Quotations",
+          icon: <FileText size={18} />,
+          path: "/quotations",
+          visible: user?.role === "sales" || user?.role === "admin",
+        },
+        {
+          key: "sales_orders",
+          label: "Sales Orders",
+          icon: <ShoppingCart size={18} />,
+          path: "/sales-orders",
+          visible: user?.role === "sales" || user?.role === "admin",
+        },
+        {
+          key: "dispatch",
+          label: "Dispatch",
+          icon: <Send size={18} />,
+          path: "/dispatch",
+          visible: user?.role === "sales" || user?.role === "admin",
+        },
+      ],
+    },
+    {
+      key: "procurement",
+      title: "Procurement",
+      visible: user?.role === "purchase" || user?.role === "admin",
+      items: [
+        {
+          key: "purchase_dashboard",
+          label: "Procurement",
+          icon: <BarChart2 size={18} />,
+          path: "/purchase-dashboard",
+          visible: user?.role === "purchase" || user?.role === "admin",
+        },
+        {
+          key: "indents",
+          label: "Indents",
+          icon: <ClipboardList size={18} />,
+          path: "/indents",
+          visible: user?.role === "sales" || user?.role === "purchase" || user?.role === "admin",
+        },
+        {
+          key: "purchase_orders",
+          label: "Purchase Orders",
+          icon: <Package size={18} />,
+          path: "/purchase-orders",
+          visible: user?.role === "purchase" || user?.role === "admin",
+        },
+        {
+          key: "grn",
+          label: "GRN",
+          icon: <ClipboardCheck size={18} />,
+          path: "/grn",
+          visible: user?.role === "purchase" || user?.role === "admin",
+        },
+        {
+          key: "vendors",
+          label: "Vendors",
+          icon: <Truck size={18} />,
+          path: "/vendors",
+          visible: user?.role === "purchase" || user?.role === "admin",
+        },
+      ],
+    },
+    {
+      key: "inventory",
+      title: "Inventory",
+      visible: true,
+      items: [
+        {
+          key: "stock_ledger",
+          label: "Stock Ledger",
+          icon: <Layers size={18} />,
+          path: "/stock-ledger",
+          visible: true,
+        },
+        {
+          key: "in_stock",
+          label: "In Stock View",
+          icon: <Package size={18} />,
+          path: "/in-stock",
+          visible: true,
+        },
+        {
+          key: "products",
+          label: "Products",
+          icon: <Package size={18} />,
+          path: "/products",
+          visible: true,
+        },
+      ],
+    },
+    {
+      key: "finance",
+      title: "Finance",
+      visible: user?.role === "sales" || user?.role === "admin",
+      items: [
+        {
+          key: "invoices",
+          label: "Invoices",
+          icon: <Receipt size={18} />,
+          path: "/invoices",
+          visible: user?.role === "sales" || user?.role === "admin",
+        },
+        {
+          key: "payments",
+          label: "Payments",
+          icon: <Wallet size={18} />,
+          path: "/payments",
+          visible: user?.role === "sales" || user?.role === "admin",
+        },
+        {
+          key: "tally",
+          label: "Tally Export",
+          icon: <FileText size={18} />,
+          path: "/tally-export",
+          visible: user?.role === "sales" || user?.role === "admin",
+        },
+      ],
+    },
+    {
+      key: "master",
+      title: "Master",
+      visible: true,
+      items: [
+        {
+          key: "customers",
+          label: "Customers",
+          icon: <Building2 size={18} />,
+          path: "/customers",
+          visible: user?.role === "sales" || user?.role === "admin",
+        },
+        {
+          key: "reports",
+          label: "Reports",
+          icon: <BarChart2 size={18} />,
+          path: "/reports",
+          visible: user?.role === "admin" || user?.role === "sales" || user?.role === "purchase",
+        },
+      ],
+    },
+    {
+      key: "admin",
+      title: "Admin",
+      visible: user?.role === "admin",
+      items: [
+        {
+          key: "users",
+          label: "User Management",
+          icon: <UserCog size={18} />,
+          path: "/user-management",
+          visible: user?.role === "admin",
+        },
+        {
+          key: "settings",
+          label: "System Settings",
+          icon: <Settings size={18} />,
+          path: "/system-settings",
+          visible: user?.role === "admin",
+        },
+      ],
+    },
+    {
+      key: "profile",
+      title: "Profile",
+      visible: true,
+      items: [
+        {
+          key: "profile",
+          label: "My Profile",
+          icon: <User size={18} />,
+          path: "/user-profile",
+          visible: true,
+        },
+      ],
+    },
+  ];
 
   const handleToggleClick = (
     e: React.MouseEvent<HTMLButtonElement>
@@ -281,17 +391,26 @@ const navItems: NavItem[] = [
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3">
-        <ul className="space-y-1">
-          {navItems
-            .filter((item) => item.visible)
-            .map((item) => (
-              <NavItemView
-                key={item.key}
-                item={item}
-                collapsed={collapsed}
-              />
+        <div className="space-y-4">
+          {sections
+            .filter((s) => s.visible)
+            .map((section) => (
+              <div key={section.key}>
+                {!collapsed && (
+                  <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wider text-white/70">
+                    {section.title}
+                  </div>
+                )}
+                <ul className="space-y-1">
+                  {section.items
+                    .filter((item) => item.visible)
+                    .map((item) => (
+                      <NavItemView key={item.key} item={item} collapsed={collapsed} />
+                    ))}
+                </ul>
+              </div>
             ))}
-        </ul>
+        </div>
       </nav>
 
       {/* Footer */}

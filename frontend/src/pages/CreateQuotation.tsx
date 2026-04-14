@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import Layout from "../components/layout/Layout";
 import { api } from "../api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 
 import type { Customer, CustomerLocation, CustomerContact } from "../types/crm";
@@ -50,6 +50,8 @@ const cardClass =
 
 export default function CreateQuotation() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const enquiryPrefillKeyRef = useRef<string | null>(null);
 
   /* ---------- BASIC ---------- */
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -310,6 +312,113 @@ export default function CreateQuotation() {
     };
   }, [selectedLocation]);
 
+  /* ----- Prefill from enquiry (navigate from Enquiry view / list; user saves quotation here) ----- */
+  useEffect(() => {
+    const st: any = location.state || {};
+    const enquiryId = Number(st.fromEnquiryId);
+    if (!Number.isFinite(enquiryId) || enquiryId <= 0) {
+      enquiryPrefillKeyRef.current = null;
+      return;
+    }
+    if (!customers.length || !products.length) return;
+
+    const key = `enquiry-${enquiryId}`;
+    if (enquiryPrefillKeyRef.current === key) return;
+    enquiryPrefillKeyRef.current = key;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const enq: any = await api.getEnquiry(enquiryId);
+        if (cancelled || !enq) {
+          enquiryPrefillKeyRef.current = null;
+          return;
+        }
+
+        const custId = Number(enq.customer_id);
+        if (custId) {
+          const cust = customers.find((c) => Number(c.id) === custId);
+          if (cust) {
+            setSelectedCustomer(cust);
+            const locs = await api.getCustomerLocations(cust.id);
+            if (cancelled) return;
+            const locList = Array.isArray(locs) ? locs : [];
+            setLocations(locList);
+            const locId = enq.customer_location_id != null ? Number(enq.customer_location_id) : null;
+            const loc = locId ? locList.find((l: any) => Number(l.id) === locId) : null;
+            setSelectedLocation(loc || null);
+            if (loc) {
+              const conts = await api.getCustomerContacts(loc.id);
+              if (cancelled) return;
+              const ctList = Array.isArray(conts) ? conts : [];
+              setContacts(ctList);
+              const cId = enq.customer_contact_id != null ? Number(enq.customer_contact_id) : null;
+              const contact = cId ? ctList.find((c: any) => Number(c.id) === cId) : null;
+              setSelectedContact(contact || null);
+            } else {
+              setContacts([]);
+              setSelectedContact(null);
+            }
+          }
+        }
+
+        const productById: Record<number, Product> = {} as any;
+        products.forEach((p) => {
+          productById[p.id] = p;
+        });
+        let rawItems: any[] = [];
+        if (Array.isArray(enq.items)) rawItems = enq.items;
+        else if (typeof enq.items === "string" && String(enq.items).trim()) {
+          try {
+            const p = JSON.parse(enq.items);
+            rawItems = Array.isArray(p) ? p : [];
+          } catch {
+            rawItems = [];
+          }
+        }
+        if (rawItems.length > 0) {
+          const mapped: LineItem[] = rawItems.map((it: any, idx: number) => {
+            const pid = Number(it.product_id) || 0;
+            const p = pid ? productById[pid] : undefined;
+            const unit = p ? Number(p.unit_price ?? 0) : it.unit_price != null ? Number(it.unit_price) : "";
+            const tax = p != null ? Number(p.tax_rate ?? 18) : Number(it.tax_rate ?? 18);
+            return {
+              id: `enq-${enquiryId}-${idx}-${Date.now()}`,
+              product_id: pid,
+              product_name: it.product_name || p?.name || "",
+              description: (it.description ?? p?.description ?? "") as string,
+              qty: Number(it.qty ?? it.quantity ?? 1) || 1,
+              uom: it.uom || p?.uom || "NOS",
+              unit_price: unit === "" ? "" : unit,
+              tax_rate: tax,
+              hsn_code: it.hsn_code || p?.hsn_code || "",
+            };
+          });
+          setItems(mapped);
+        }
+
+        if (enq.enquiry_date) {
+          const d = new Date(enq.enquiry_date);
+          if (!Number.isNaN(d.getTime())) {
+            const offset = d.getTimezoneOffset() * 60000;
+            setDate(new Date(d.getTime() - offset).toISOString().slice(0, 10));
+          }
+        }
+        if (enq.notes) setNotes(String(enq.notes));
+
+        toast.success(`Prefilled from enquiry ${enq.enquiry_no || enquiryId}. Review and save.`);
+        navigate("/create-quotation", { replace: true, state: {} });
+      } catch (e) {
+        console.error(e);
+        enquiryPrefillKeyRef.current = null;
+        toast.error("Could not load enquiry to prefill quotation");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customers, products, location.state, navigate]);
 
 
   /* ================= GLOBAL CLICK CLOSE FOR PRODUCT ROWS ================= */
@@ -719,7 +828,12 @@ export default function CreateQuotation() {
     setSaving(true);
 
     try {
-      await api.createQuotation({
+      // Get source enquiry ID if converting from enquiry
+      const st: any = location.state || {};
+      const enquiryId = Number(st.fromEnquiryId);
+      const hasEnquirySource = Number.isFinite(enquiryId) && enquiryId > 0;
+
+      const payload: any = {
         quotation_no: useAutoQuotationNo ? undefined : quotationNo,
 
         quotation_date: date,
@@ -730,6 +844,9 @@ export default function CreateQuotation() {
         customer_id: selectedCustomer.id,
         customer_location_id: selectedLocation.id,
         customer_contact_id: selectedContact.id,
+
+        // 🔗 SOURCE ENQUIRY (if this quotation is from an enquiry)
+        ...(hasEnquirySource && { enquiry_id: enquiryId }),
 
         // 📸 SNAPSHOT (IMMUTABLE)
         customer_snapshot: {
@@ -777,10 +894,26 @@ export default function CreateQuotation() {
         notes,
         remarks,
         status,
-      });
+      };
 
-      toast.success("Quotation saved successfully");
-      navigate("/quotations");
+      await api.createQuotation(payload);
+
+      // 🔥 UPDATE ENQUIRY STATUS TO 'QUOTED' IF CREATED FROM ENQUIRY
+      if (hasEnquirySource) {
+        try {
+          await api.updateEnquiry(enquiryId, { status: "quoted" });
+          toast.success(`✅ ENQ${enquiryId.toString().padStart(7, '0')} marked as QUOTED`);
+        } catch (e) {
+          console.warn("Failed to update enquiry", e);
+          toast.success("Quotation created (status update skipped)");
+        }
+      } else {
+        toast.success("Quotation created successfully");
+      }
+
+      setTimeout(() => {
+        navigate("/quotations");
+      }, 1500);
     } catch (err) {
       console.error(err);
       toast.error("Failed to save quotation");
@@ -1379,42 +1512,43 @@ export default function CreateQuotation() {
                     <td className="p-2 text-center text-gray-500">{idx + 1}</td>
 
                     <td className="p-2 relative">
-                      <input
-                        value={
-                          openRow === it.id
-                            ? (editingValue[it.id] ?? "")
-                            : (it.product_name ?? "")
-                        }
-                        onFocus={() => {
-                          setOpenRow(it.id);
+                      {/* PRODUCT SEARCH INPUT - Enhanced styling like customer search */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={
+                            openRow === it.id
+                              ? (editingValue[it.id] ?? "")
+                              : (it.product_name ?? "")
+                          }
+                          onFocus={() => {
+                            setOpenRow(it.id);
+                            setEditingValue((prev) => ({
+                              ...prev,
+                              [it.id]: it.product_name || "",
+                            }));
+                          }}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setEditingValue((prev) => ({
+                              ...prev,
+                              [it.id]: value,
+                            }));
+                            setProductSearch((prev) => ({
+                              ...prev,
+                              [it.id]: value,
+                            }));
+                          }}
+                          placeholder="Search product..."
+                          className="w-full h-10 rounded-lg border border-gray-300 px-3 py-2 text-[15px] font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          aria-label={`Product for line item ${idx + 1}`}
+                        />
+                      </div>
 
-                          setEditingValue((prev) => ({
-                            ...prev,
-                            [it.id]: it.product_name || "",
-                          }));
-                        }}
-                        onChange={(e) => {
-                          const value = e.target.value;
-
-                          setEditingValue((prev) => ({
-                            ...prev,
-                            [it.id]: value,
-                          }));
-
-                          // 🔥 keep search in sync (for dropdown)
-                          setProductSearch((prev) => ({
-                            ...prev,
-                            [it.id]: value,
-                          }));
-                        }}
-                        className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-rose-400"
-                        aria-label={`Product for line item ${idx + 1}`}
-                      />
-
-
+                      {/* DESCRIPTION TEXTAREA - Only shown when product selected and row not open */}
                       {it.product_id > 0 && openRow !== it.id && (
                         <textarea
-                          className="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-xs
+                          className="mt-2 w-full rounded-md border border-gray-200 px-3 py-2 text-xs
                                      focus:ring-1 focus:ring-rose-400 focus:outline-none"
                           placeholder="Description (editable)"
                           value={it.description}
@@ -1444,13 +1578,12 @@ export default function CreateQuotation() {
                           search !== base.name.trim().toLowerCase();
 
                         return (
-                          <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+                          <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg top-12">
 
                             {/* ================= PRODUCT LIST ================= */}
-                            <div className="max-h-56 overflow-auto">
-
+                            <div className="max-h-64 overflow-y-auto border-b">
                               {filteredProducts.length === 0 && (
-                                <div className="px-3 py-2 text-xs text-gray-400">
+                                <div className="px-4 py-3 text-sm text-gray-400 text-center">
                                   No products found
                                 </div>
                               )}
@@ -1459,18 +1592,16 @@ export default function CreateQuotation() {
                                 <div
                                   key={p.id}
                                   onMouseDown={() => onProductSelect(it.id, p)}
-                                  className="px-3 py-2 cursor-pointer hover:bg-gray-50 border-b last:border-b-0"
+                                  className="px-4 py-3 cursor-pointer hover:bg-blue-50 border-b last:border-b-0 transition-colors"
                                 >
                                   <div className="text-sm font-semibold text-gray-900">
                                     {p.name}
                                   </div>
-
-                                  <div className="text-xs text-gray-500 mt-0.5">
-                                    ₹{(p.unit_price ?? 0).toLocaleString()} • {p.uom ?? "NOS"} • {p.tax_rate ?? 0}% GST
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    Price: ₹{(p.unit_price ?? 0).toLocaleString()} • {p.uom ?? "NOS"} • {p.tax_rate ?? 0}% GST
                                   </div>
-
                                   {p.description && (
-                                    <div className="text-xs text-gray-400 mt-0.5 line-clamp-2">
+                                    <div className="text-xs text-gray-400 mt-1 line-clamp-2">
                                       {p.description}
                                     </div>
                                   )}
@@ -1478,12 +1609,11 @@ export default function CreateQuotation() {
                               ))}
                             </div>
 
-                            {/* ================= ACTIONS ================= */}
-                            <div className="border-t">
-
-                              {/* ✅ ALWAYS AVAILABLE MANUAL ADD */}
+                            {/* ================= ACTIONS SECTION ================= */}
+                            <div>
+                              {/* ALWAYS AVAILABLE MANUAL ADD */}
                               <div
-                                className="px-3 py-2 text-blue-600 text-sm font-medium cursor-pointer hover:bg-blue-50"
+                                className="px-4 py-3 text-blue-600 text-sm font-medium cursor-pointer hover:bg-blue-50 border-b transition-colors"
                                 onMouseDown={() => {
                                   setProductForm({
                                     name: "",
@@ -1492,10 +1622,8 @@ export default function CreateQuotation() {
                                     uom: "NOS",
                                     unit_price: "",
                                     tax_rate: "18",
-                                   
                                     status: "active",
                                   });
-
                                   setProductModalRowId(it.id);
                                   setAddProductOpen(true);
                                   setOpenRow(null);
@@ -1504,34 +1632,27 @@ export default function CreateQuotation() {
                                 + Add New Product
                               </div>
 
-                              {/* ✅ SMART CREATE FROM TYPING */}
+                              {/* SMART CREATE FROM TYPING */}
                               {search && (!exactMatch || isDerived) && (
                                 <div
-                                  className="px-3 py-2 text-rose-600 text-sm font-medium cursor-pointer hover:bg-rose-50 border-t"
+                                  className="px-4 py-3 text-rose-600 text-sm font-medium cursor-pointer hover:bg-rose-50 transition-colors"
                                   onMouseDown={() => {
                                     const base = baseProductMap[it.id];
-
                                     setProductForm({
                                       name: searchRaw,
-
-                                      // 🔥 KEY FEATURE: inherit
                                       description: base?.description || "",
-
                                       hsn_code: base?.hsn_code || "",
                                       uom: base?.uom || "NOS",
                                       unit_price: base?.unit_price?.toString() || "",
                                       tax_rate: base?.tax_rate?.toString() || "18",
-                                      
                                       status: "active",
                                     });
-
                                     setProductModalRowId(it.id);
                                     setAddProductOpen(true);
                                     setOpenRow(null);
                                   }}
                                 >
                                   + Create "{searchRaw}"
-
                                   {base && isDerived && (
                                     <div className="text-xs text-gray-400 mt-0.5">
                                       based on "{base.name}"
