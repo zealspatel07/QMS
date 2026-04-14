@@ -47,7 +47,7 @@ export default function CreateSalesOrder() {
     (async () => {
       try {
         setLoading(true);
-        const quots = await api.getQuotations({ limit: 500, status: "pending" });
+        const quots = await api.getQuotations({ status: "pending" });
         setQuotations(Array.isArray(quots) ? quots : []);
       } catch (e: any) {
         setErr(e?.message || "Failed to load quotations");

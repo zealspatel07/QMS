@@ -6,7 +6,6 @@ import { toast } from "react-toastify";
 import { Edit2, Trash2, Check, ArrowRight } from "lucide-react";
 
 const cardClass = "bg-white rounded-xl border border-gray-200 p-6";
-const inputClass = "rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none";
 
 export default function SalesOrderView() {
   const { id } = useParams<{ id: string }>();

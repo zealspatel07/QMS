@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import api from "../api";
 import { toast } from "react-toastify";
-import { Plus, Trash2, RefreshCw, ChevronLeft } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { ArrowRight } from "lucide-react";
 
 const inputClass =
@@ -95,7 +95,7 @@ export default function DispatchCreate() {
       product_id: it.product_id || 0,
       product_name: it.product_name || "",
       so_qty: Number(it.qty || it.quantity || 0),
-      dispatch_qty: "",
+      dispatch_qty: null,
       uom: it.uom || "NOS",
     }));
 
@@ -396,12 +396,12 @@ export default function DispatchCreate() {
                           <td className="px-4 py-3 text-center">
                             <input
                               type="number"
-                              value={item.dispatch_qty}
+                              value={item.dispatch_qty ?? ""}
                               onChange={(e) =>
                                 updateItem(item.id, {
                                   dispatch_qty:
                                     e.target.value === ""
-                                      ? ""
+                                      ? null
                                       : Number(e.target.value),
                                 })
                               }

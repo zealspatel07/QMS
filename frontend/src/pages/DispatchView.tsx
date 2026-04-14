@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import api from "../api";
 import { toast } from "react-toastify";
-import { Edit2, Trash2, Check, X, ChevronRight, ArrowRight } from "lucide-react";
+import { Edit2, Trash2, Check, ArrowRight } from "lucide-react";
 
 const cardClass = "bg-white rounded-xl border border-gray-200 p-6";
 
