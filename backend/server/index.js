@@ -1,7 +1,7 @@
 // server/index.js:-
 
 
-
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const { DB_NAME, ...db } = require('./db'); // must expose getConnection() and endPool()
