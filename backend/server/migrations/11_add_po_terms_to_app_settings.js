@@ -1,6 +1,5 @@
 // server/migrations/04_add_po_terms_to_app_settings.js
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

@@ -1,7 +1,6 @@
 // server/migrations/19_fix_email_uniqueness_safe.js
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

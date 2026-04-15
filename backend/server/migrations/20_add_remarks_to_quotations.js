@@ -1,7 +1,6 @@
 // server/migrations/20_add_remarks_to_quotations.js
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

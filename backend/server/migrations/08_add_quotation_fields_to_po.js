@@ -1,7 +1,6 @@
 // server/migrations/08_add_quotation_fields_to_po.js
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

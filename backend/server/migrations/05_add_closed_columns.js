@@ -1,6 +1,5 @@
 // server/migrations/05_add_closed_columns.js
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

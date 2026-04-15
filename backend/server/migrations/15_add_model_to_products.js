@@ -1,6 +1,5 @@
 // server/migrations/15_add_model_to_products.js
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

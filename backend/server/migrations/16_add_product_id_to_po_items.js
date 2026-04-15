@@ -2,7 +2,6 @@
 // Add product_id column to po_items table for better product reference tracking
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

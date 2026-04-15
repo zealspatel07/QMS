@@ -1,7 +1,6 @@
 //server/migrations/03_create_purchase_orders_table.js
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

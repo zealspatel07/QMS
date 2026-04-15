@@ -4,7 +4,6 @@
 // This file documents that direct PO creation is supported as of this version
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

@@ -2,7 +2,6 @@
 // Adds discount and GST rate fields to purchase_orders table
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

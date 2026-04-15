@@ -1,7 +1,6 @@
 // server/migrations/02_alter_indents_add_customer_relations.js
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

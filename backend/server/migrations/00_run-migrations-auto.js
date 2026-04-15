@@ -10,7 +10,6 @@
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 // ============================================
 // MIGRATION RUNNER - Async/Await (NOT IIFE)

@@ -1,6 +1,5 @@
 // server/migrations/18_add_model_to_quotations.js
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

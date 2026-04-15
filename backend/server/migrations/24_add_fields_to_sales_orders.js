@@ -2,7 +2,6 @@
 // Adds terms, notes, and delivery_date columns to sales_orders table
 
 const mysql = require("mysql2/promise");
-require("dotenv").config();
 
 async function columnExists(conn, schema, table, column) {
   const [rows] = await conn.query(

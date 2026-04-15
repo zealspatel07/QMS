@@ -1,6 +1,5 @@
 // server/migrations/02_create_vendors_table.js
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

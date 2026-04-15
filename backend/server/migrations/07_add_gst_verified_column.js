@@ -1,6 +1,5 @@
 // server/migrations/07_add_gst_verified_column.js
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 /**
  * Migration to add gst_verified column to vendors table

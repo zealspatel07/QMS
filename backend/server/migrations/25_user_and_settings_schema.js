@@ -2,7 +2,6 @@
 // Create user roles, permissions, system settings, and notification tracking tables
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

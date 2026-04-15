@@ -1,6 +1,5 @@
 // server/migrations/01_create_indents_table.js
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

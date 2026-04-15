@@ -2,7 +2,6 @@
 // Adds CRM linkage + item list support to enquiries
 
 const mysql = require("mysql2/promise");
-require("dotenv").config();
 
 async function columnExists(conn, schema, table, column) {
   const [rows] = await conn.query(

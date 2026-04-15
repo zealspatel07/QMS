@@ -1,5 +1,4 @@
  const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   const conn = await mysql.createConnection({

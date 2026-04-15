@@ -1,6 +1,5 @@
 // server/migrations/06_add_po_number_to_indents.js
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

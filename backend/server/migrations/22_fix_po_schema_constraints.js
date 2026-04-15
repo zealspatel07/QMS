@@ -1,7 +1,6 @@
 // server/migrations/21_fix_po_schema_constraints.js
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
 (async () => {
   let conn;

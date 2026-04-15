@@ -2,7 +2,6 @@
 // Creates ERP tables: enquiries, sales_orders, dispatches, dispatch_items, invoices, stock_ledger
 
 const mysql = require("mysql2/promise");
-require("dotenv").config();
 
 (async () => {
   let conn;
