@@ -66,10 +66,46 @@ async function updatePayment(req, res) {
   }
 }
 
+async function updateInvoice(req, res) {
+  let conn;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+    conn = await service.getConn();
+    const result = await service.updateInvoice(conn, id, req.body);
+    res.json(result);
+  } catch (err) {
+    console.error("updateInvoice error:", err);
+    res.status(500).json({ error: "Failed to update invoice", details: err.message });
+  } finally {
+    conn?.release();
+  }
+}
+
+async function deleteInvoice(req, res) {
+  let conn;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+    conn = await service.getConn();
+    const result = await service.deleteInvoice(conn, id);
+    res.json(result);
+  } catch (err) {
+    console.error("deleteInvoice error:", err);
+    res.status(500).json({ error: "Failed to delete invoice", details: err.message });
+  } finally {
+    conn?.release();
+  }
+}
+
+
+
 module.exports = {
   listInvoices,
   getInvoice,
   createFromDispatch,
   updatePayment,
+  updateInvoice,
+  deleteInvoice,
 };
 

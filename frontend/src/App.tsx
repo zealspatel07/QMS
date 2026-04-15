@@ -43,6 +43,7 @@ import EditVendor from "./pages/EditVendor";
 import Enquiries from "./pages/Enquiries";
 import SalesOrders from "./pages/SalesOrders";
 import SalesOrderView from "./pages/SalesOrderView";
+import CreateSalesOrder from "./pages/CreateSalesOrder";
 import Dispatch from "./pages/Dispatch";
 import DispatchCreate from "./pages/DispatchCreate";
 import DispatchView from "./pages/DispatchView";
@@ -50,6 +51,9 @@ import GRN from "./pages/GRN";
 import StockLedger from "./pages/StockLedger";
 import InStockView from "./pages/InStockView";
 import Invoices from "./pages/Invoices";
+import InvoiceCreate from "./pages/InvoiceCreate";
+import InvoiceView from "./pages/InvoiceView";
+import InvoiceEdit from "./pages/InvoiceEdit";
 import Payments from "./pages/Payments";
 import TallyExport from "./pages/TallyExport";
 import EnquiryCreate from "./pages/EnquiryCreate";
@@ -386,6 +390,14 @@ export default function App() {
           }
         />
         <Route
+          path="/create-sales-order"
+          element={
+            <ProtectedApp>
+              <CreateSalesOrder />
+            </ProtectedApp>
+          }
+        />
+        <Route
           path="/dispatch"
           element={
             <ProtectedApp>
@@ -444,6 +456,30 @@ export default function App() {
           element={
             <ProtectedApp>
               <Invoices />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/invoices/create"
+          element={
+            <ProtectedApp>
+              <InvoiceCreate />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/invoices/:id"
+          element={
+            <ProtectedApp>
+              <InvoiceView />
+            </ProtectedApp>
+          }
+        />
+        <Route
+          path="/invoices/:id/edit"
+          element={
+            <ProtectedApp>
+              <InvoiceEdit />
             </ProtectedApp>
           }
         />

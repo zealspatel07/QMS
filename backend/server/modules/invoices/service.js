@@ -134,6 +134,7 @@ async function getInvoice(conn, id) {
   };
 }
 
+
 async function createFromDispatch(conn, dispatchId, payload, user) {
   const { invoice_date = null, due_date = null, terms = null, notes = null } = payload || {};
 
@@ -265,11 +266,68 @@ async function updatePayment(conn, invoiceId, payload, user) {
   return { success: true, id: invoiceId, amount_paid: Math.round(newPaid * 100) / 100, payment_status: paymentStatus };
 }
 
+async function updateInvoice(conn, invoiceId, payload) {
+  const { invoice_date, due_date, terms, notes, status } = payload || {};
+  const [[inv]] = await conn.query(`SELECT id, payment_status FROM invoices WHERE id = ? LIMIT 1`, [invoiceId]);
+  if (!inv) throw new Error("Invoice not found");
+
+  const updates = [];
+  const values = [];
+
+  if (invoice_date !== undefined) {
+    updates.push("invoice_date = ?");
+    values.push(invoice_date || null);
+  }
+  if (due_date !== undefined) {
+    updates.push("due_date = ?");
+    values.push(due_date || null);
+  }
+  if (terms !== undefined) {
+    updates.push("terms = ?");
+    values.push(terms || null);
+  }
+  if (notes !== undefined) {
+    updates.push("notes = ?");
+    values.push(notes || null);
+  }
+  if (status !== undefined) {
+    const next = String(status || "").toLowerCase();
+    if (!["draft", "issued", "cancelled"].includes(next)) throw new Error("Invalid status");
+    if (next === "cancelled" && inv.payment_status === "paid") {
+      throw new Error("Paid invoice cannot be cancelled");
+    }
+    updates.push("status = ?");
+    values.push(next);
+  }
+
+  if (!updates.length) return { success: true, id: invoiceId, message: "No fields updated" };
+
+  updates.push("updated_at = NOW()");
+  values.push(invoiceId);
+  await conn.query(`UPDATE invoices SET ${updates.join(", ")} WHERE id = ?`, values);
+  return { success: true, id: invoiceId };
+}
+
+async function deleteInvoice(conn, invoiceId) {
+  const [[inv]] = await conn.query(
+    `SELECT id, payment_status, status FROM invoices WHERE id = ? LIMIT 1`,
+    [invoiceId],
+  );
+  if (!inv) throw new Error("Invoice not found");
+  if (String(inv.payment_status) === "paid") {
+    throw new Error("Paid invoice cannot be deleted");
+  }
+  await conn.query(`DELETE FROM invoices WHERE id = ?`, [invoiceId]);
+  return { success: true, id: invoiceId };
+}
+
 module.exports = {
   getConn,
   listInvoices,
   getInvoice,
   createFromDispatch,
   updatePayment,
+  updateInvoice,
+  deleteInvoice,
 };
 

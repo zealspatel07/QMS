@@ -19,6 +19,7 @@
     "mysql2": "^3.5.2",
     "nodemailer": "^7.0.12",
     "pdfkit": "^0.18.0",
+    "puppeteer-core": "^24.40.0",
     "socket.io": "^4.8.1",
     "xlsx": "^0.18.5"
   }

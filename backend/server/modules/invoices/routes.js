@@ -11,6 +11,8 @@ router.get("/invoices/:id", authMiddleware, requireAdminOrSales, controller.getI
 router.post("/invoices/from-dispatch/:dispatchId", authMiddleware, requireAdminOrSales, controller.createFromDispatch);
 
 router.put("/invoices/:id/payment", authMiddleware, requireAdminOrSales, controller.updatePayment);
+router.patch("/invoices/:id", authMiddleware, requireAdminOrSales, controller.updateInvoice);
+router.delete("/invoices/:id", authMiddleware, requireAdminOrSales, controller.deleteInvoice);
 
 module.exports = router;
 

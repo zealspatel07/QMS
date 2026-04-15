@@ -16,13 +16,19 @@ export default function GRN() {
   const [postingId, setPostingId] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadPos = () => {
     setLoading(true);
     api
       .getPurchaseOrders()
       .then((rows: any) => setPos(Array.isArray(rows) ? rows : []))
       .catch((e: any) => setErr(e?.message || "Failed to load POs"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadPos();
+    const interval = window.setInterval(loadPos, 20000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const openPos = useMemo(
@@ -35,9 +41,8 @@ export default function GRN() {
       setPostingId(poId);
       setErr(null);
       const resp = await api.postGrnFromPo(poId, {});
-      // Soft refresh list; user can open PO view for exact progress
-      console.log("GRN posted:", resp);
       alert(resp?.message || `GRN posted for PO ${poId}`);
+      loadPos();
     } catch (e: any) {
       setErr(e?.message || "Failed to post GRN");
     } finally {

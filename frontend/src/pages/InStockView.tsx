@@ -14,15 +14,29 @@ export default function InStockView() {
   const [qty, setQty] = useState<string>("");
   const [unitCost, setUnitCost] = useState<string>("");
   const [remarks, setRemarks] = useState<string>("");
+  const [modalProductSearch, setModalProductSearch] = useState("");
+  const [quickProductId, setQuickProductId] = useState<string>("");
+  const [quickQty, setQuickQty] = useState<string>("1");
+  const [quickPosting, setQuickPosting] = useState(false);
+  const [quickRowPostingId, setQuickRowPostingId] = useState<number | null>(null);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  useEffect(() => {
+  const loadStock = async () => {
     setLoading(true);
-    api
+    return api
       .getInStock({ q, limit: 300, only_positive: true })
       .then((r) => setRows(Array.isArray(r) ? r : []))
       .catch((e: any) => setErr(e?.message || "Failed to load stock"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadStock();
+  }, [q]);
+
+  useEffect(() => {
+    const interval = window.setInterval(loadStock, 20000);
+    return () => window.clearInterval(interval);
   }, [q]);
 
   useEffect(() => {
@@ -31,6 +45,16 @@ export default function InStockView() {
       .then((r: any) => setProducts(Array.isArray(r) ? r : []))
       .catch(() => {});
   }, []);
+
+  const filteredProducts = useMemo(() => {
+    const needle = modalProductSearch.trim().toLowerCase();
+    if (!needle) return products;
+    return products.filter((p: any) => {
+      const name = String(p?.name || "").toLowerCase();
+      const hsn = String(p?.hsn_code || "").toLowerCase();
+      return name.includes(needle) || hsn.includes(needle) || String(p?.id || "").includes(needle);
+    });
+  }, [products, modalProductSearch]);
 
   async function postInward() {
     try {
@@ -68,14 +92,45 @@ export default function InStockView() {
       setRemarks("");
 
       // Refresh stock view
-      setLoading(true);
-      const refreshed = await api.getInStock({ q, limit: 300, only_positive: true });
-      setRows(Array.isArray(refreshed) ? refreshed : []);
+      await loadStock();
     } catch (e: any) {
       setErr(e?.message || "Failed to post stock inward");
     } finally {
       setPosting(false);
-      setLoading(false);
+    }
+  }
+
+  async function quickPostInward(pid: number, quantity: number, quickRemarks: string) {
+    try {
+      setErr(null);
+      await api.postManualStockInward({
+        grn_date: today,
+        remarks: quickRemarks,
+        items: [{ product_id: pid, quantity, remarks: quickRemarks }],
+      });
+      await loadStock();
+    } catch (e: any) {
+      setErr(e?.message || "Failed to add stock quickly");
+    }
+  }
+
+  async function handleQuickShortcut() {
+    const pid = Number(quickProductId);
+    const quantity = Number(quickQty);
+    if (!Number.isFinite(pid) || pid <= 0) {
+      setErr("Enter valid product ID for quick add.");
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setErr("Enter valid quantity for quick add.");
+      return;
+    }
+    try {
+      setQuickPosting(true);
+      await quickPostInward(pid, quantity, `Quick stock add for product ${pid}`);
+      setQuickQty("1");
+    } finally {
+      setQuickPosting(false);
     }
   }
 
@@ -109,29 +164,115 @@ export default function InStockView() {
           </div>
         </div>
 
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-40">
+              <label className="text-xs font-semibold text-amber-800">Quick Add by Product ID</label>
+              <input
+                value={quickProductId}
+                onChange={(e) => setQuickProductId(e.target.value)}
+                className="block w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                placeholder="e.g. 52"
+              />
+            </div>
+            <div className="min-w-32">
+              <label className="text-xs font-semibold text-amber-800">Qty</label>
+              <input
+                value={quickQty}
+                onChange={(e) => setQuickQty(e.target.value)}
+                className="block w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                placeholder="1"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleQuickShortcut}
+              disabled={quickPosting}
+              className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50"
+            >
+              {quickPosting ? "Adding..." : "Quick Add Stock"}
+            </button>
+            <p className="text-xs text-amber-700">
+              Shortcut for dispatch errors like insufficient stock on a product ID.
+            </p>
+          </div>
+        </div>
+
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
+                  <th className="text-left px-4 py-3 font-semibold">ID</th>
                   <th className="text-left px-4 py-3 font-semibold">Product</th>
                   <th className="text-left px-4 py-3 font-semibold">HSN</th>
                   <th className="text-left px-4 py-3 font-semibold">UOM</th>
                   <th className="text-right px-4 py-3 font-semibold">Available</th>
+                  <th className="text-right px-4 py-3 font-semibold">Quick Inward</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.product_id} className="border-t">
+                    <td className="px-4 py-3 text-slate-700">{r.product_id}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">{r.product_name}</td>
                     <td className="px-4 py-3 text-slate-600">{r.hsn_code || "—"}</td>
                     <td className="px-4 py-3 text-slate-600">{r.uom || "—"}</td>
                     <td className="px-4 py-3 text-right font-semibold">{Number(r.available_qty || 0).toFixed(3)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setQuickRowPostingId(Number(r.product_id));
+                            try {
+                              await quickPostInward(Number(r.product_id), 1, `Quick +1 stock for ${r.product_name}`);
+                            } finally {
+                              setQuickRowPostingId(null);
+                            }
+                          }}
+                          disabled={quickRowPostingId === Number(r.product_id)}
+                          className="px-2 py-1 text-xs rounded border"
+                        >
+                          +1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setQuickRowPostingId(Number(r.product_id));
+                            try {
+                              await quickPostInward(Number(r.product_id), 5, `Quick +5 stock for ${r.product_name}`);
+                            } finally {
+                              setQuickRowPostingId(null);
+                            }
+                          }}
+                          disabled={quickRowPostingId === Number(r.product_id)}
+                          className="px-2 py-1 text-xs rounded border"
+                        >
+                          +5
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setQuickRowPostingId(Number(r.product_id));
+                            try {
+                              await quickPostInward(Number(r.product_id), 10, `Quick +10 stock for ${r.product_name}`);
+                            } finally {
+                              setQuickRowPostingId(null);
+                            }
+                          }}
+                          disabled={quickRowPostingId === Number(r.product_id)}
+                          className="px-2 py-1 text-xs rounded border"
+                        >
+                          +10
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {!loading && rows.length === 0 && (
                   <tr>
-                    <td className="px-4 py-10 text-center text-slate-500" colSpan={4}>
+                    <td className="px-4 py-10 text-center text-slate-500" colSpan={6}>
                       No products found.
                     </td>
                   </tr>
@@ -160,15 +301,21 @@ export default function InStockView() {
             <div className="px-6 py-5 space-y-4">
               <div>
                 <label className="text-xs font-semibold text-slate-600">Product</label>
+                <input
+                  value={modalProductSearch}
+                  onChange={(e) => setModalProductSearch(e.target.value)}
+                  className="block w-full border rounded-lg px-3 py-2 text-sm mb-2"
+                  placeholder="Search by id, name or HSN..."
+                />
                 <select
                   value={productId}
                   onChange={(e) => setProductId(e.target.value ? Number(e.target.value) : "")}
                   className="block w-full border rounded-lg px-3 py-2 text-sm"
                 >
                   <option value="">Select product…</option>
-                  {products.map((p) => (
+                  {filteredProducts.map((p: any) => (
                     <option key={p.id} value={p.id}>
-                      {p.name}
+                      #{p.id} - {p.name}
                     </option>
                   ))}
                 </select>

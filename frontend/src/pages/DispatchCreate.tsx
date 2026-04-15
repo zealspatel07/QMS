@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import api from "../api";
@@ -39,6 +39,9 @@ export default function DispatchCreate() {
   );
   const [dispatchItems, setDispatchItems] = useState<DispatchItem[]>([]);
   const [remarks, setRemarks] = useState("");
+  const [stockByProduct, setStockByProduct] = useState<Record<number, number>>({});
+  const [checkingStock, setCheckingStock] = useState(false);
+  const [addingMissingStock, setAddingMissingStock] = useState(false);
 
   // Load sales orders on mount
   useEffect(() => {
@@ -116,6 +119,102 @@ export default function DispatchCreate() {
     setDispatchItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const loadStockAvailability = async () => {
+    const productIds = Array.from(
+      new Set(
+        dispatchItems
+          .map((it) => Number(it.product_id))
+          .filter((pid) => Number.isFinite(pid) && pid > 0),
+      ),
+    );
+    if (!productIds.length) {
+      setStockByProduct({});
+      return;
+    }
+    try {
+      setCheckingStock(true);
+      const rows = await api.getAvailableStockBulk(productIds);
+      const map: Record<number, number> = {};
+      for (const r of Array.isArray(rows) ? rows : []) {
+        const pid = Number(r?.product_id);
+        if (!Number.isFinite(pid) || pid <= 0) continue;
+        map[pid] = Number(r?.available_qty || 0);
+      }
+      setStockByProduct(map);
+    } catch (e) {
+      console.error("Stock check failed:", e);
+      toast.error("Failed to auto-check stock availability");
+    } finally {
+      setCheckingStock(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedSO || dispatchItems.length === 0) return;
+    loadStockAvailability();
+  }, [selectedSO, dispatchItems.length]);
+
+  useEffect(() => {
+    if (!selectedSO) return;
+    const t = window.setInterval(() => {
+      loadStockAvailability();
+    }, 20000);
+    return () => window.clearInterval(t);
+  }, [selectedSO, dispatchItems.length]);
+
+  const shortageByProduct = useMemo(() => {
+    const m: Record<number, number> = {};
+    for (const item of dispatchItems) {
+      const pid = Number(item.product_id);
+      const req = Number(item.dispatch_qty || 0);
+      if (!Number.isFinite(pid) || pid <= 0 || req <= 0) continue;
+      const available = Number(stockByProduct[pid] || 0);
+      const shortage = Math.max(0, req - available);
+      if (shortage > 0) m[pid] = Math.max(0, (m[pid] || 0) + shortage);
+    }
+    return m;
+  }, [dispatchItems, stockByProduct]);
+
+  const totalShortageQty = useMemo(
+    () => Object.values(shortageByProduct).reduce((s, n) => s + Number(n || 0), 0),
+    [shortageByProduct],
+  );
+
+  const addMissingStock = async (productId?: number) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const items = productId
+      ? [{ product_id: productId, quantity: Number(shortageByProduct[productId] || 0), remarks: "Auto shortage fill from dispatch" }]
+      : Object.entries(shortageByProduct)
+          .filter(([, qty]) => Number(qty) > 0)
+          .map(([pid, qty]) => ({
+            product_id: Number(pid),
+            quantity: Number(qty),
+            remarks: "Auto shortage fill from dispatch",
+          }));
+
+    if (!items.length) {
+      toast.info("No shortage to add");
+      return;
+    }
+
+    try {
+      setAddingMissingStock(true);
+      await api.postManualStockInward({
+        grn_date: today,
+        remarks: productId
+          ? `Auto stock add for product ${productId} from dispatch screen`
+          : "Auto stock add for dispatch shortages",
+        items,
+      });
+      toast.success(productId ? "Missing stock added for selected product" : "Missing stock added for all shortage lines");
+      await loadStockAvailability();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to add missing stock");
+    } finally {
+      setAddingMissingStock(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selectedSO) {
       toast.error("Select a sales order");
@@ -146,6 +245,24 @@ export default function DispatchCreate() {
         );
         return;
       }
+    }
+
+    const blockingShortages = validItems
+      .map((item) => {
+        const available = Number(stockByProduct[item.product_id] || 0);
+        const required = Number(item.dispatch_qty || 0);
+        return {
+          product_name: item.product_name,
+          shortage: Math.max(0, required - available),
+        };
+      })
+      .filter((x) => x.shortage > 0);
+
+    if (blockingShortages.length > 0) {
+      toast.error(
+        `Insufficient stock for ${blockingShortages.length} item(s). Use "Add Missing" or "Auto Add All Missing Stock" first.`,
+      );
+      return;
     }
 
     setSaving(true);
@@ -359,6 +476,33 @@ export default function DispatchCreate() {
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">
                   Dispatch Items
                 </h2>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs text-gray-600">
+                    {checkingStock ? "Checking stock..." : "Live stock check active"}
+                    {totalShortageQty > 0 && (
+                      <span className="ml-2 font-semibold text-red-700">
+                        Shortage detected: {totalShortageQty.toFixed(3)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={loadStockAvailability}
+                      className="px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50"
+                    >
+                      Refresh Stock
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addMissingStock()}
+                      disabled={addingMissingStock || totalShortageQty <= 0}
+                      className="px-3 py-1.5 text-xs rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {addingMissingStock ? "Adding..." : "Auto Add All Missing Stock"}
+                    </button>
+                  </div>
+                </div>
                 <div className="overflow-x-auto border rounded-lg">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b">
@@ -376,6 +520,12 @@ export default function DispatchCreate() {
                           Dispatch Qty
                         </th>
                         <th className="px-4 py-2 text-center font-semibold text-gray-700">
+                          Available
+                        </th>
+                        <th className="px-4 py-2 text-center font-semibold text-gray-700">
+                          Shortage
+                        </th>
+                        <th className="px-4 py-2 text-center font-semibold text-gray-700">
                           UOM
                         </th>
                         <th className="px-4 py-2 text-center font-semibold text-gray-700">
@@ -385,6 +535,11 @@ export default function DispatchCreate() {
                     </thead>
                     <tbody>
                       {dispatchItems.map((item, idx) => (
+                        (() => {
+                          const available = Number(stockByProduct[item.product_id] || 0);
+                          const requested = Number(item.dispatch_qty || 0);
+                          const shortage = Math.max(0, requested - available);
+                          return (
                         <tr key={item.id} className="border-b hover:bg-gray-50">
                           <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
                           <td className="px-4 py-3 font-medium text-gray-900">
@@ -411,6 +566,28 @@ export default function DispatchCreate() {
                               className="w-20 text-center rounded border border-gray-300 px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                           </td>
+                          <td className="px-4 py-3 text-center text-gray-700">
+                            {available.toFixed(3)}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {shortage > 0 ? (
+                              <div className="inline-flex items-center gap-2">
+                                <span className="text-xs font-semibold text-red-700">
+                                  {shortage.toFixed(3)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => addMissingStock(Number(item.product_id))}
+                                  disabled={addingMissingStock}
+                                  className="px-2 py-1 text-[11px] rounded bg-red-100 text-red-700 hover:bg-red-200"
+                                >
+                                  Add Missing
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-emerald-700 font-semibold">OK</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-center text-gray-600">
                             {item.uom}
                           </td>
@@ -424,6 +601,8 @@ export default function DispatchCreate() {
                             </button>
                           </td>
                         </tr>
+                          );
+                        })()
                       ))}
                     </tbody>
                   </table>
@@ -452,7 +631,7 @@ export default function DispatchCreate() {
               <div className="flex gap-3 justify-end">
                 <button
                   type="button"
-                  onClick={() => navigate("/dispatches")}
+                  onClick={() => navigate("/dispatch")}
                   className="px-6 py-2 rounded-lg border border-gray-300 font-semibold text-gray-700 hover:bg-gray-50"
                 >
                   Cancel

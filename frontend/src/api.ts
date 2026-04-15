@@ -216,6 +216,8 @@ export interface ApiShape {
   getInvoiceById: (id: number | string) => Promise<any>;
   createInvoiceFromDispatch: (dispatchId: number | string, payload?: any) => Promise<any>;
   updateInvoicePayment: (invoiceId: number | string, payload: { amount_paid?: number; add_amount?: number }) => Promise<any>;
+  updateInvoice: (invoiceId: number | string, payload: { invoice_date?: string | null; due_date?: string | null; terms?: string | null; notes?: string | null; status?: string }) => Promise<any>;
+  deleteInvoice: (invoiceId: number | string) => Promise<any>;
 
   // stock ledger
   getAvailableStock: (productId: number | string) => Promise<{ product_id: number; available_qty: number }>;
@@ -1103,6 +1105,16 @@ export const api: ApiShape = {
       method: "PUT",
       body: JSON.stringify(payload || {}),
     }),
+  updateInvoice: (invoiceId, payload) =>
+    requestJson(`/api/invoices/${invoiceId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload || {}),
+    }),
+  deleteInvoice: (invoiceId) =>
+    requestJson(`/api/invoices/${invoiceId}`, {
+      method: "DELETE",
+    }),
+
 
   /* ================= STOCK LEDGER / GRN ================= */
   getAvailableStock: (productId) => requestJson(`/api/stock-ledger/available/${productId}`),

@@ -355,6 +355,45 @@ async function outwardDispatch(conn, payload, user) {
   return { success: true, posted: rows.length };
 }
 
+async function inwardReturnDispatch(conn, payload, user) {
+  const { dispatch_id, dispatch_date = null, items, remarks = null } = payload || {};
+  const dispatchId = Number(dispatch_id);
+  if (!Number.isFinite(dispatchId) || dispatchId <= 0) {
+    const err = new Error("dispatch_id required");
+    err.statusCode = 400;
+    err.code = "VALIDATION_ERROR";
+    throw err;
+  }
+
+  const normalized = normalizeItems(items);
+  const rows = normalized.map((it) => [
+    it.product_id,
+    dispatch_date ? new Date(dispatch_date) : new Date(),
+    "ADJUSTMENT",
+    "IN",
+    it.quantity,
+    it.uom,
+    null,
+    "dispatches",
+    dispatchId,
+    it.ref_item_id,
+    it.remarks || remarks || "Dispatch reversal",
+    user?.id || null,
+  ]);
+
+  await conn.query(
+    `
+      INSERT INTO stock_ledger
+        (product_id, txn_date, txn_type, direction, quantity, uom, unit_cost,
+         ref_table, ref_id, ref_item_id, remarks, created_by)
+      VALUES ?
+    `,
+    [rows],
+  );
+
+  return { success: true, posted: rows.length };
+}
+
 module.exports = {
   getConn,
   getAvailableStock,
@@ -364,5 +403,6 @@ module.exports = {
   inwardGrn,
   inwardGrnFromPo,
   outwardDispatch,
+  inwardReturnDispatch,
 };
 

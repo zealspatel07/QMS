@@ -109,7 +109,22 @@ export default function DispatchView() {
       ? JSON.parse(dispatch.items)
       : [];
 
-  const totalDispatched = items.reduce((sum: number, item: any) => sum + Number(item.dispatch_qty || 0), 0);
+  const getProductName = (item: any) => {
+    // First try product_name field
+    if (item.product_name) return item.product_name;
+    
+    // Then try to get from product_snapshot (JSON object)
+    if (item.product_snapshot) {
+      const snapshot = typeof item.product_snapshot === "string" 
+        ? JSON.parse(item.product_snapshot) 
+        : item.product_snapshot;
+      return snapshot?.product_name || snapshot?.name || "—";
+    }
+    
+    return "—";
+  };
+
+  const totalDispatched = items.reduce((sum: number, item: any) => sum + Number(item.dispatched_qty || item.dispatch_qty || 0), 0);
 
   return (
     <Layout>
@@ -215,9 +230,9 @@ export default function DispatchView() {
                 {items.map((item: any, idx: number) => (
                   <tr key={idx} className="border-b hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{item.product_name}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{getProductName(item)}</td>
                     <td className="px-4 py-3 text-center text-gray-700 font-semibold">
-                      {Number(item.dispatch_qty || 0).toFixed(2)}
+                      {Number(item.dispatched_qty || item.dispatch_qty || 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-center text-gray-600">{item.uom}</td>
                   </tr>
@@ -277,7 +292,7 @@ export default function DispatchView() {
         <div className="flex gap-3 justify-end">
           <button
             type="button"
-            onClick={() => navigate("/dispatches")}
+            onClick={() => navigate("/dispatch")}
             className="px-6 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50"
           >
             Back
